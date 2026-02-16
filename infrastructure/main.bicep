@@ -69,6 +69,9 @@ param containerRegistrySku string = 'Basic'
 @description('GitHub Actions Service Principal Object ID (for deployment storage access)')
 param githubActionsPrincipalId string = ''
 
+@description('Deploy Berlin MCP monitoring server')
+param deployBerlinMcp bool = false
+
 // Common tags
 var tags = {
   Environment: environment
@@ -83,6 +86,7 @@ var lisbonRgName = 'rg-parking-lisbon-${environment}'
 var madridRgName = 'rg-parking-madrid-${environment}'
 var parisRgName = 'rg-parking-paris-${environment}'
 var berlinRgName = 'rg-parking-berlin-${environment}'
+var berlinMcpRgName = 'rg-parking-berlin-mcp-${environment}'
 
 // ========================================
 // Resource Groups
@@ -120,6 +124,13 @@ resource parisRg 'Microsoft.Resources/resourceGroups@2023-07-01' = {
 
 resource berlinRg 'Microsoft.Resources/resourceGroups@2023-07-01' = {
   name: berlinRgName
+  location: location
+  tags: tags
+}
+
+// Berlin MCP Server Resource Group
+resource berlinMcpRg 'Microsoft.Resources/resourceGroups@2023-07-01' = if (deployBerlinMcp) {
+  name: berlinMcpRgName
   location: location
   tags: tags
 }
@@ -265,6 +276,28 @@ module berlinAcrAccess 'modules/acr-role-assignment.bicep' = if (createContainer
 }
 
 // ========================================
+// Berlin MCP Server (Container App)
+// ========================================
+
+// Berlin MCP Server
+module berlinMcpServer 'modules/berlin-mcp-server.bicep' = if (deployBerlinMcp) {
+  scope: berlinMcpRg
+  name: 'berlin-mcp-deployment'
+  params: {
+    location: location
+    environment: environment
+    berlinApiUrl: berlinApi.outputs.containerAppUrl
+    containerImage: createContainerRegistry ? '${acr!.outputs.loginServer}/berlin-mcp-server:latest' : 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
+    containerRegistry: createContainerRegistry ? acr!.outputs.loginServer : ''
+    acrName: createContainerRegistry ? acr!.outputs.registryName : ''
+    tags: tags
+  }
+  dependsOn: [
+    berlinApi
+  ]
+}
+
+// ========================================
 // Madrid API (Windows Server VM)
 // ========================================
 
@@ -376,3 +409,8 @@ output madridFqdn string = madridApi.outputs.fqdn
 output parisVmName string = parisApi.outputs.vmName
 output parisPublicIp string = parisApi.outputs.publicIpAddress
 output parisFqdn string = parisApi.outputs.fqdn
+
+// Berlin MCP Server Outputs
+output berlinMcpResourceGroup string = deployBerlinMcp ? berlinMcpRg.name : ''
+output berlinMcpServerUrl string = deployBerlinMcp ? berlinMcpServer!.outputs.containerAppUrl : ''
+output berlinMcpServerFqdn string = deployBerlinMcp ? berlinMcpServer!.outputs.containerAppFqdn : ''
