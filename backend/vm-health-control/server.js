@@ -74,7 +74,7 @@ app.get('/api/vm-health/state', (_req, res) => {
 app.patch('/api/vm-health/:vmName', async (req, res) => {
   const { vmName } = req.params;
 
-  if (!state.vms[vmName]) {
+  if (!Object.hasOwn(state.vms, vmName)) {
     return res.status(404).json({
       success: false,
       error: `Unknown VM: ${vmName}. Valid values: ${Object.keys(state.vms).join(', ')}`
