@@ -5,7 +5,7 @@ const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 3090;
 const DEFAULT_MAX_DURATION_MINUTES = Math.max(1, Number(process.env.CHAOS_DEFAULT_MAX_DURATION_MINUTES || 60));
-const MAX_DURATION_MINUTES = 24 * 60;
+const MAX_ALLOWED_DURATION_MINUTES = 24 * 60;
 const RECONCILE_INTERVAL_MS = Math.max(5_000, Number(process.env.CHAOS_RECONCILE_INTERVAL_MS || 30_000));
 
 app.use(cors());
@@ -52,7 +52,7 @@ const normalizeServicePatch = (patch = {}) => ({
   pathPattern: typeof patch.pathPattern === 'string' && patch.pathPattern.trim() ? patch.pathPattern.trim() : '/api',
   method: typeof patch.method === 'string' && patch.method.trim() ? patch.method.trim().toUpperCase() : '*',
   maxDurationMinutes: Number.isFinite(Number(patch.maxDurationMinutes))
-    ? Math.max(1, Math.min(MAX_DURATION_MINUTES, Number(patch.maxDurationMinutes)))
+    ? Math.max(1, Math.min(MAX_ALLOWED_DURATION_MINUTES, Number(patch.maxDurationMinutes)))
     : DEFAULT_MAX_DURATION_MINUTES,
   enabledAt: typeof patch.enabledAt === 'string' ? patch.enabledAt : null,
   expiresAt: typeof patch.expiresAt === 'string' ? patch.expiresAt : null
@@ -125,7 +125,6 @@ app.get('/health', (req, res) => {
 });
 
 app.get('/api/chaos/state', (req, res) => {
-  reconcileExpiredChaos();
   res.json({ success: true, data: state });
 });
 
