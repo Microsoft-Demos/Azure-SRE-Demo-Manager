@@ -1,6 +1,7 @@
 const DEFAULT_CONTROL_URL = process.env.CHAOS_CONTROL_URL || 'http://localhost:3090';
 const CACHE_TTL_MS = Number(process.env.CHAOS_CACHE_TTL_MS || 2000);
 const DEFAULT_MAX_MEMORY_HOLDS = Number(process.env.CHAOS_HIGH_MEMORY_MAX_CONCURRENT || 2);
+const MAX_CHAOS_DURATION_MS = Math.max(0, Number(process.env.CHAOS_MAX_DURATION_MS || (4 * 60 * 60 * 1000)));
 const memoryHolds = [];
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -199,6 +200,12 @@ const createChaosMiddleware = (serviceName, options = {}) => {
 
     const serviceConfig = state.services && state.services[serviceName];
     if (!serviceConfig || !serviceConfig.enabled) {
+      return next();
+    }
+
+    const enabledAtMs = serviceConfig.enabledAt ? new Date(serviceConfig.enabledAt).getTime() : NaN;
+    if (Number.isFinite(enabledAtMs) && Date.now() - enabledAtMs > MAX_CHAOS_DURATION_MS) {
+      console.warn(`[CHAOS] Safety limit reached for ${serviceName}, skipping fault injection`);
       return next();
     }
 

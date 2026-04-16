@@ -7,6 +7,7 @@ Simulates VM health state changes by sending fake unhealthy/healthy log entries 
 | Variable | Default | Description |
 |---|---|---|
 | `PORT` | `3095` | HTTP listen port |
+| `VM_STARTUP_GRACE_MS` | `60000` | Grace window (ms) before first unhealthy transition is accepted |
 | `LOG_ANALYTICS_WORKSPACE_ID` | _(empty)_ | Log Analytics workspace ID |
 | `LOG_ANALYTICS_SHARED_KEY` | _(empty)_ | Log Analytics primary/secondary key |
 | `LOG_TYPE` | `VMHealthStatus` | Custom log table name (appears as `VMHealthStatus_CL`) |

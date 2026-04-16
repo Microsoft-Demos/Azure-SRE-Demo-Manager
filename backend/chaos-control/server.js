@@ -4,6 +4,7 @@ const cors = require('cors');
 
 const app = express();
 const PORT = process.env.PORT || 3090;
+const DEFAULT_MAX_DURATION_MINUTES = Math.max(1, Number(process.env.CHAOS_DEFAULT_MAX_DURATION_MINUTES || 60));
 
 app.use(cors());
 app.use(express.json());
@@ -19,7 +20,10 @@ const defaultServiceState = () => ({
   statusCode: 500,
   errorMessage: 'Chaos simulated error',
   pathPattern: '/api',
-  method: '*'
+  method: '*',
+  maxDurationMinutes: DEFAULT_MAX_DURATION_MINUTES,
+  enabledAt: null,
+  expiresAt: null
 });
 
 const state = {
@@ -44,12 +48,71 @@ const normalizeServicePatch = (patch = {}) => ({
   statusCode: Number.isFinite(Number(patch.statusCode)) ? Math.max(400, Math.min(599, Number(patch.statusCode))) : 500,
   errorMessage: typeof patch.errorMessage === 'string' && patch.errorMessage.trim() ? patch.errorMessage.trim() : 'Chaos simulated error',
   pathPattern: typeof patch.pathPattern === 'string' && patch.pathPattern.trim() ? patch.pathPattern.trim() : '/api',
-  method: typeof patch.method === 'string' && patch.method.trim() ? patch.method.trim().toUpperCase() : '*'
+  method: typeof patch.method === 'string' && patch.method.trim() ? patch.method.trim().toUpperCase() : '*',
+  maxDurationMinutes: Number.isFinite(Number(patch.maxDurationMinutes))
+    ? Math.max(1, Math.min(24 * 60, Number(patch.maxDurationMinutes)))
+    : DEFAULT_MAX_DURATION_MINUTES,
+  enabledAt: typeof patch.enabledAt === 'string' ? patch.enabledAt : null,
+  expiresAt: typeof patch.expiresAt === 'string' ? patch.expiresAt : null
 });
 
 const touchState = () => {
   state.updatedAt = new Date().toISOString();
 };
+
+const applyChaosTtl = (currentServiceState, patchedServiceState) => {
+  const nextState = { ...patchedServiceState };
+
+  if (!nextState.enabled) {
+    nextState.enabledAt = null;
+    nextState.expiresAt = null;
+    return nextState;
+  }
+
+  const existingEnabledAt = currentServiceState?.enabledAt;
+  const enabledAt = existingEnabledAt || new Date().toISOString();
+  nextState.enabledAt = enabledAt;
+  nextState.expiresAt = new Date(
+    new Date(enabledAt).getTime() + (nextState.maxDurationMinutes * 60 * 1000)
+  ).toISOString();
+
+  return nextState;
+};
+
+const disableServiceChaos = (serviceState) => {
+  serviceState.enabled = false;
+  serviceState.enabledAt = null;
+  serviceState.expiresAt = null;
+};
+
+const reconcileExpiredChaos = () => {
+  const now = Date.now();
+  let changed = false;
+
+  Object.entries(state.services).forEach(([serviceName, serviceState]) => {
+    if (!serviceState.enabled) {
+      return;
+    }
+
+    const expiresAtMs = serviceState.expiresAt ? new Date(serviceState.expiresAt).getTime() : NaN;
+    const enabledAtMs = serviceState.enabledAt ? new Date(serviceState.enabledAt).getTime() : NaN;
+    const hasLegacyOrInvalidMetadata = !Number.isFinite(enabledAtMs) || !Number.isFinite(expiresAtMs);
+    const isExpired = Number.isFinite(expiresAtMs) && now >= expiresAtMs;
+
+    if (hasLegacyOrInvalidMetadata || isExpired) {
+      disableServiceChaos(serviceState);
+      changed = true;
+      console.log(`[CHAOS] Auto-disabled ${serviceName} chaos (${hasLegacyOrInvalidMetadata ? 'missing-metadata' : 'expired'})`);
+    }
+  });
+
+  if (changed) {
+    touchState();
+  }
+};
+
+setInterval(reconcileExpiredChaos, 30_000);
+reconcileExpiredChaos();
 
 app.get('/health', (req, res) => {
   res.json({
@@ -60,6 +123,7 @@ app.get('/health', (req, res) => {
 });
 
 app.get('/api/chaos/state', (req, res) => {
+  reconcileExpiredChaos();
   res.json({ success: true, data: state });
 });
 
@@ -73,7 +137,10 @@ app.put('/api/chaos/state', (req, res) => {
   if (payload.services && typeof payload.services === 'object') {
     Object.keys(state.services).forEach((serviceName) => {
       if (payload.services[serviceName]) {
-        state.services[serviceName] = normalizeServicePatch(payload.services[serviceName]);
+        state.services[serviceName] = applyChaosTtl(
+          state.services[serviceName],
+          normalizeServicePatch(payload.services[serviceName])
+        );
       }
     });
   }
@@ -101,10 +168,13 @@ app.patch('/api/chaos/services/:serviceName', (req, res) => {
     return res.status(404).json({ success: false, error: `Unknown service: ${serviceName}` });
   }
 
-  state.services[serviceName] = normalizeServicePatch({
+  state.services[serviceName] = applyChaosTtl(
+    state.services[serviceName],
+    normalizeServicePatch({
     ...state.services[serviceName],
     ...req.body
-  });
+    })
+  );
 
   touchState();
   return res.json({ success: true, data: state.services[serviceName] });

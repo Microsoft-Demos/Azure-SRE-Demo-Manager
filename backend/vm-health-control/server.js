@@ -6,6 +6,7 @@ const { LogsIngestionClient } = require('@azure/monitor-ingestion');
 
 const app = express();
 const PORT = process.env.PORT || 3095;
+const STARTUP_GRACE_MS = Math.max(0, Number(process.env.VM_STARTUP_GRACE_MS || 60000));
 
 app.use(cors());
 app.use(express.json());
@@ -30,8 +31,8 @@ function getIngestionClient() {
 const state = {
   updatedAt: new Date().toISOString(),
   vms: {
-    madrid: { healthy: true, lastChanged: null, lastLogSent: null },
-    paris: { healthy: true, lastChanged: null, lastLogSent: null }
+    madrid: { healthy: true, lastChanged: null, lastLogSent: null, startupGraceUntil: null },
+    paris: { healthy: true, lastChanged: null, lastLogSent: null, startupGraceUntil: null }
   }
 };
 
@@ -86,9 +87,50 @@ app.patch('/api/vm-health/:vmName', async (req, res) => {
     return res.status(400).json({ success: false, error: 'healthy must be a boolean' });
   }
 
-  const previousState = state.vms[vmName].healthy;
-  state.vms[vmName].healthy = healthy;
-  state.vms[vmName].lastChanged = new Date().toISOString();
+  const vmState = state.vms[vmName];
+  const previousState = vmState.healthy;
+  const now = Date.now();
+
+  if (!healthy && previousState) {
+    if (!vmState.startupGraceUntil) {
+      vmState.startupGraceUntil = new Date(now + STARTUP_GRACE_MS).toISOString();
+      state.updatedAt = new Date().toISOString();
+    }
+
+    if (now < new Date(vmState.startupGraceUntil).getTime()) {
+      return res.json({
+        success: true,
+        data: {
+          vm: vmName,
+          healthy: previousState,
+          skipped: true,
+          reason: 'startup-grace-period',
+          startupGraceUntil: vmState.startupGraceUntil
+        }
+      });
+    }
+  }
+
+  if (healthy && vmState.startupGraceUntil) {
+    vmState.startupGraceUntil = null;
+  }
+
+  if (healthy === previousState) {
+    return res.json({
+      success: true,
+      data: {
+        vm: vmName,
+        healthy,
+        previousState,
+        skipped: true,
+        reason: 'no-state-change'
+      }
+    });
+  }
+
+  vmState.healthy = healthy;
+  vmState.lastChanged = new Date().toISOString();
+  vmState.startupGraceUntil = null;
   state.updatedAt = new Date().toISOString();
 
   // Build and send the log entry
@@ -109,7 +151,7 @@ app.patch('/api/vm-health/:vmName', async (req, res) => {
   }];
 
   const logResult = await sendToLogAnalytics(logEntry);
-  state.vms[vmName].lastLogSent = logResult.success ? new Date().toISOString() : null;
+  vmState.lastLogSent = logResult.success ? new Date().toISOString() : null;
 
   return res.json({
     success: true,

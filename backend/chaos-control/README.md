@@ -61,6 +61,13 @@ This starts chaos-control + all parking APIs + frontend proxy in one terminal.
 - `maxMemoryHolds` limits concurrent memory holds per service (default: `2`)
 - Optional env fallback: `CHAOS_HIGH_MEMORY_MAX_CONCURRENT`
 
+## Chaos TTL and auto-expiry
+
+- `maxDurationMinutes` limits how long a service chaos configuration can stay enabled (default: `60`)
+- When chaos is enabled, the service state includes `enabledAt` and `expiresAt`
+- Expired or legacy-enabled entries without TTL metadata are auto-disabled every 30 seconds
+- Optional env fallback for default TTL: `CHAOS_DEFAULT_MAX_DURATION_MINUTES`
+
 ## Backoffice configuration guide (per fault type)
 
 ### Common fields (apply to most faults)
