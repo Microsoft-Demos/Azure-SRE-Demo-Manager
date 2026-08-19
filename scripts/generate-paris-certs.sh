@@ -8,6 +8,7 @@ set -e  # Exit on any error
 # Configuration
 API_DIRECTORY="${1:-.}"
 CERT_DAYS="${2:-365}"
+CERT_COMMON_NAME="${3:-paris-api.local}"
 CERT_NAME="paris"
 
 # Colors for output
@@ -87,7 +88,7 @@ fi
 
 openssl req -new -x509 -key "${CERT_NAME}.key" -out "${CERT_NAME}.crt" \
     -days "$CERT_DAYS" \
-    -subj "/C=FR/ST=Paris/L=Paris/O=Parking/OU=API/CN=10.0.1.4" || \
+    -subj "/C=FR/ST=Paris/L=Paris/O=Parking/OU=API/CN=${CERT_COMMON_NAME}" || \
     error_exit "Failed to generate certificate"
 
 print_success "Self-signed certificate generated successfully (valid for $CERT_DAYS days)"

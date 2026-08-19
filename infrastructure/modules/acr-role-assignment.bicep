@@ -7,6 +7,9 @@ param principalId string
 @description('Name of the Azure Container Registry')
 param acrName string
 
+@description('Azure Container Registry data-plane role definition ID')
+param roleDefinitionId string = '7f951dda-4ed3-4680-a7ca-43fe172d538d' // AcrPull
+
 // Reference existing ACR
 resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' existing = {
   name: acrName
@@ -14,10 +17,10 @@ resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' existing = {
 
 // AcrPull role assignment
 resource acrPullRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(acr.id, 'AcrPull')
+  name: guid(acr.id, principalId, roleDefinitionId)
   scope: acr
   properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d') // AcrPull
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleDefinitionId)
     principalId: principalId
     principalType: 'ServicePrincipal'
   }

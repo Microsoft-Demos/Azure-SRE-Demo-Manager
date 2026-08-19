@@ -13,7 +13,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp, Scope, Receive, Send
 
 # Configuration
-BERLIN_API_URL = os.getenv("BERLIN_API_URL", "https://ca-parking-berlin.braveocean-195c6009.swedencentral.azurecontainerapps.io")
+BERLIN_API_URL = os.getenv("BERLIN_API_URL", "http://localhost:3004")
 APPINSIGHTS_CONNECTION = os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING")
 MCP_AUTH_TOKEN = os.getenv("MCP_AUTH_TOKEN")  # Bearer token for authentication
 

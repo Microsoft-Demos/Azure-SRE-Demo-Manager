@@ -5,6 +5,9 @@ param location string
 @description('Log Analytics Workspace ID for Application Insights')
 param logAnalyticsWorkspaceId string
 
+@description('App Service VNet integration subnet ID')
+param appServiceSubnetId string
+
 @description('Environment URLs for the APIs')
 param lisbonApiUrl string = ''
 param madridApiUrl string = ''
@@ -56,8 +59,9 @@ resource appService 'Microsoft.Web/sites@2023-01-01' = {
   properties: {
     serverFarmId: appServicePlan.id
     httpsOnly: true
+    virtualNetworkSubnetId: appServiceSubnetId
     siteConfig: {
-      linuxFxVersion: 'NODE|18-lts'
+      linuxFxVersion: 'NODE|20-lts'
       alwaysOn: true
       minTlsVersion: '1.2'
       ftpsState: 'Disabled'

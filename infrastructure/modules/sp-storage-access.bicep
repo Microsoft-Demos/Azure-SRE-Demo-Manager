@@ -5,15 +5,16 @@ param principalId string
 @description('Storage account ID')
 param storageAccountId string
 
-@description('Subscription ID')
-param subscriptionId string = subscription().subscriptionId
+resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' existing = {
+  name: last(split(storageAccountId, '/'))
+}
 
 // Assign Storage Blob Data Contributor role to SP on storage account
 resource roleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(storageAccountId, principalId, 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
-  scope: resourceGroup()
+  name: guid(storageAccount.id, principalId, 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+  scope: storageAccount
   properties: {
-    roleDefinitionId: '/subscriptions/${subscriptionId}/providers/Microsoft.Authorization/roleDefinitions/ba92f5b4-2d11-453d-a403-e96b0029c9fe'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
     principalId: principalId
     principalType: 'ServicePrincipal'
   }

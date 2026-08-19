@@ -29,3 +29,4 @@ REACT_APP_VM_HEALTH_CONTROL_URL=<vm-health-control-url>
 ```
 
 See [HTTPS_SETUP_GUIDE.md](HTTPS_SETUP_GUIDE.md) for certificate generation on the VMs.
+> **Historical note:** The portable deployment no longer disables TLS verification and uses private HTTP VM endpoints through App Service VNet integration.

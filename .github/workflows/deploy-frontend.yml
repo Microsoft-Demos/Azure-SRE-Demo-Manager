@@ -12,11 +12,15 @@ on:
 env:
   AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME }}
   RESOURCE_GROUP: ${{ vars.FRONTEND_RESOURCE_GROUP }}
-  NODE_VERSION: '16.x'
+  NODE_VERSION: '20.x'
 
 jobs:
   build-and-deploy:
+    if: github.ref == 'refs/heads/main' && vars.AZURE_DEPLOYMENTS_ENABLED == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     
     steps:
       - name: Checkout code
@@ -39,7 +43,9 @@ jobs:
           REACT_APP_LISBON_API_URL: ${{ vars.LISBON_API_URL }}
           REACT_APP_MADRID_API_URL: ${{ vars.MADRID_API_URL }}
           REACT_APP_PARIS_API_URL: ${{ vars.PARIS_API_URL }}
+          REACT_APP_BERLIN_API_URL: ${{ vars.BERLIN_API_URL }}
           REACT_APP_CHAOS_CONTROL_URL: ${{ vars.CHAOS_CONTROL_URL }}
+          REACT_APP_VM_HEALTH_CONTROL_URL: ${{ vars.VM_HEALTH_CONTROL_URL }}
         run: |
           # Create production build with API URLs
           npm run build
@@ -97,23 +103,23 @@ jobs:
           unzip -l deployment.zip | head -20
 
       - name: Log in to Azure
-        uses: azure/login@v1
+        uses: azure/login@v2
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          client-id: ${{ vars.AZURE_APP_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - name: Deploy to Azure App Service
         uses: azure/CLI@v1
-        timeout-minutes: 3
-        continue-on-error: true
+        timeout-minutes: 10
         with:
           inlineScript: |
             echo "Deploying package to App Service..."
             az webapp deploy \
-              --resource-group ${{ env.RESOURCE_GROUP }} \
-              --name ${{ env.AZURE_WEBAPP_NAME }} \
+              --resource-group "$RESOURCE_GROUP" \
+              --name "$AZURE_WEBAPP_NAME" \
               --src-path frontend/parking-manager/deployment.zip \
-              --type zip \
-              --async true
+              --type zip
             
             echo "✅ Deployment initiated - Oryx will build and install dependencies"
       
@@ -127,16 +133,20 @@ jobs:
 
       - name: Verify deployment
         run: |
-          echo "Waiting for app to restart..."
-          sleep 30
-          
-          APP_URL="https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net"
-          
-          if curl -f -s -o /dev/null -w "%{http_code}" "$APP_URL" | grep -q "200"; then
-            echo "✅ Frontend is accessible"
-          else
-            echo "⚠️  Frontend may still be starting up"
-          fi
+          APP_URL="https://${AZURE_WEBAPP_NAME}.azurewebsites.net"
+
+          for attempt in $(seq 1 20); do
+            if curl --fail --silent --show-error --output /dev/null "$APP_URL"; then
+              echo "✅ Frontend is accessible"
+              exit 0
+            fi
+
+            echo "Frontend is not ready yet (attempt $attempt/20)"
+            sleep 15
+          done
+
+          echo "Frontend did not become healthy: $APP_URL"
+          exit 1
 
       - name: Deployment summary
         if: success()

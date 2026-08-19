@@ -2,17 +2,14 @@ const express = require('express');
 const path = require('path');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 
-// Allow self-signed certificates (development only)
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-
 const app = express();
 const PORT = process.env.PORT || 8080;
 
 // Backend URLs from environment variables
 const backendConfig = {
-  lisbon: process.env.REACT_APP_LISBON_API_URL || 'http://10.0.1.4:3001',
-  madrid: process.env.REACT_APP_MADRID_API_URL || 'https://10.0.1.5:3002',
-  paris: process.env.REACT_APP_PARIS_API_URL || 'https://10.0.1.6:3003',
+  lisbon: process.env.REACT_APP_LISBON_API_URL || 'http://localhost:3001',
+  madrid: process.env.REACT_APP_MADRID_API_URL || 'http://localhost:3002',
+  paris: process.env.REACT_APP_PARIS_API_URL || 'http://localhost:3003',
   berlin: process.env.REACT_APP_BERLIN_API_URL || 'http://localhost:3004',
   chaosControl: process.env.REACT_APP_CHAOS_CONTROL_URL || 'http://localhost:3090',
   vmHealthControl: process.env.REACT_APP_VM_HEALTH_CONTROL_URL || 'http://localhost:3095'
@@ -25,7 +22,7 @@ console.log('Backend Configuration:', backendConfig);
 const createProxy = (target, city, rewritePath) => createProxyMiddleware({
   target,
   changeOrigin: true,
-  secure: false, // Accept self-signed certificates
+  secure: true,
   logLevel: 'warn',
   pathRewrite: rewritePath || ((pathReq) => pathReq.replace(/^\/api\/(lisbon|madrid|paris|berlin)/, '/api')),
   

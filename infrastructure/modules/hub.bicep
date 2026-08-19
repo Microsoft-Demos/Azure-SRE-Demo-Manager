@@ -8,11 +8,26 @@ param vnetAddressPrefix string = '10.0.0.0/16'
 @description('Subnet address prefix for VMs')
 param vmSubnetPrefix string = '10.0.1.0/24'
 
-@description('Subnet address prefix for Container Apps')
-param containerSubnetPrefix string = '10.0.2.0/23'
+@description('Exclusive subnet address prefix for the Lisbon Container Apps environment')
+param lisbonContainerSubnetPrefix string = '10.0.2.0/27'
+
+@description('Exclusive subnet address prefix for the Berlin Container Apps environment')
+param berlinContainerSubnetPrefix string = '10.0.2.32/27'
+
+@description('Exclusive subnet address prefix for the Chaos Container Apps environment')
+param chaosContainerSubnetPrefix string = '10.0.2.64/27'
+
+@description('Exclusive subnet address prefix for the Berlin MCP Container Apps environment')
+param berlinMcpContainerSubnetPrefix string = '10.0.2.96/27'
+
+@description('Subnet address prefix for App Service VNet integration')
+param appServiceSubnetPrefix string = '10.0.5.0/24'
+
+@description('Subnet address prefix for private endpoints')
+param privateEndpointSubnetPrefix string = '10.0.6.0/27'
 
 @description('Allowed source IP address prefix for SSH/RDP access. Use specific IP ranges in production.')
-param allowedSourceIpPrefix string = '*'
+param allowedSourceIpPrefix string = 'VirtualNetwork'
 
 @description('Tags to apply to resources')
 param tags object = {}
@@ -36,54 +51,28 @@ resource nsgVms 'Microsoft.Network/networkSecurityGroups@2023-05-01' = {
   properties: {
     securityRules: [
       {
-        name: 'AllowHTTP'
+        name: 'AllowAPIPort3002'
         properties: {
           priority: 100
           direction: 'Inbound'
           access: 'Allow'
           protocol: 'Tcp'
           sourcePortRange: '*'
-          destinationPortRange: '80'
-          sourceAddressPrefix: '*'
-          destinationAddressPrefix: '*'
-        }
-      }
-      {
-        name: 'AllowHTTPS'
-        properties: {
-          priority: 110
-          direction: 'Inbound'
-          access: 'Allow'
-          protocol: 'Tcp'
-          sourcePortRange: '*'
-          destinationPortRange: '443'
-          sourceAddressPrefix: '*'
-          destinationAddressPrefix: '*'
-        }
-      }
-      {
-        name: 'AllowAPIPort3002'
-        properties: {
-          priority: 120
-          direction: 'Inbound'
-          access: 'Allow'
-          protocol: 'Tcp'
-          sourcePortRange: '*'
           destinationPortRange: '3002'
-          sourceAddressPrefix: '*'
+          sourceAddressPrefix: 'VirtualNetwork'
           destinationAddressPrefix: '*'
         }
       }
       {
         name: 'AllowAPIPort3003'
         properties: {
-          priority: 130
+          priority: 110
           direction: 'Inbound'
           access: 'Allow'
           protocol: 'Tcp'
           sourcePortRange: '*'
           destinationPortRange: '3003'
-          sourceAddressPrefix: '*'
+          sourceAddressPrefix: 'VirtualNetwork'
           destinationAddressPrefix: '*'
         }
       }
@@ -117,9 +106,9 @@ resource nsgVms 'Microsoft.Network/networkSecurityGroups@2023-05-01' = {
   }
 }
 
-// Public IP for NAT Gateway (GitHub runners egress)
-resource pipRunnerEgress 'Microsoft.Network/publicIPAddresses@2023-05-01' = {
-  name: 'pip-github-runners-egress'
+// Explicit outbound for private VMs. New VNets don't provide default outbound access.
+resource pipVmEgress 'Microsoft.Network/publicIPAddresses@2023-05-01' = {
+  name: 'pip-vm-egress'
   location: location
   tags: tags
   sku: {
@@ -130,16 +119,10 @@ resource pipRunnerEgress 'Microsoft.Network/publicIPAddresses@2023-05-01' = {
     publicIPAddressVersion: 'IPv4'
     idleTimeoutInMinutes: 10
   }
-  zones: [
-    '1'
-    '2'
-    '3'
-  ]
 }
 
-// NAT Gateway for GitHub-hosted runners subnet
-resource natGateway 'Microsoft.Network/natGateways@2023-05-01' = {
-  name: 'ngw-github-runners'
+resource vmNatGateway 'Microsoft.Network/natGateways@2023-05-01' = {
+  name: 'ngw-vm-egress'
   location: location
   tags: tags
   sku: {
@@ -148,45 +131,10 @@ resource natGateway 'Microsoft.Network/natGateways@2023-05-01' = {
   properties: {
     publicIpAddresses: [
       {
-        id: pipRunnerEgress.id
+        id: pipVmEgress.id
       }
     ]
     idleTimeoutInMinutes: 10
-  }
-}
-
-// Route tables for proper traffic routing between subnets
-resource udrVms 'Microsoft.Network/routeTables@2023-05-01' = {
-  name: 'udr-vms'
-  location: location
-  tags: tags
-  properties: {
-    routes: [
-      {
-        name: 'route-to-app-service'
-        properties: {
-          addressPrefix: '10.0.5.0/24'
-          nextHopType: 'VnetLocal'
-        }
-      }
-    ]
-  }
-}
-
-resource udrAppService 'Microsoft.Network/routeTables@2023-05-01' = {
-  name: 'udr-app-service'
-  location: location
-  tags: tags
-  properties: {
-    routes: [
-      {
-        name: 'route-to-vms'
-        properties: {
-          addressPrefix: '10.0.1.0/24'
-          nextHopType: 'VnetLocal'
-        }
-      }
-    ]
   }
 }
 
@@ -213,21 +161,21 @@ resource vmSubnet 'Microsoft.Network/virtualNetworks/subnets@2023-05-01' = {
     networkSecurityGroup: {
       id: nsgVms.id
     }
-    routeTable: {
-      id: udrVms.id
+    natGateway: {
+      id: vmNatGateway.id
     }
   }
 }
 
-// Create Container Apps subnet as separate resource
-resource containerSubnet 'Microsoft.Network/virtualNetworks/subnets@2023-05-01' = {
+// Every Container Apps environment requires an exclusive delegated subnet.
+resource lisbonContainerSubnet 'Microsoft.Network/virtualNetworks/subnets@2023-05-01' = {
   parent: vnet
-  name: 'snet-container-apps'
+  name: 'snet-container-lisbon'
   dependsOn: [
     vmSubnet
   ]
   properties: {
-    addressPrefix: containerSubnetPrefix
+    addressPrefix: lisbonContainerSubnetPrefix
     delegations: [
       {
         name: 'Microsoft.App/environments'
@@ -239,23 +187,74 @@ resource containerSubnet 'Microsoft.Network/virtualNetworks/subnets@2023-05-01' 
   }
 }
 
-// Note: snet-github-runners subnet is created by github-runner-network.bicep module
-// with proper GitHub.Network/networkSettings delegation. It is not created here to avoid conflicts.
+resource berlinContainerSubnet 'Microsoft.Network/virtualNetworks/subnets@2023-05-01' = {
+  parent: vnet
+  name: 'snet-container-berlin'
+  dependsOn: [
+    lisbonContainerSubnet
+  ]
+  properties: {
+    addressPrefix: berlinContainerSubnetPrefix
+    delegations: [
+      {
+        name: 'Microsoft.App/environments'
+        properties: {
+          serviceName: 'Microsoft.App/environments'
+        }
+      }
+    ]
+  }
+}
+
+resource chaosContainerSubnet 'Microsoft.Network/virtualNetworks/subnets@2023-05-01' = {
+  parent: vnet
+  name: 'snet-container-chaos'
+  dependsOn: [
+    berlinContainerSubnet
+  ]
+  properties: {
+    addressPrefix: chaosContainerSubnetPrefix
+    delegations: [
+      {
+        name: 'Microsoft.App/environments'
+        properties: {
+          serviceName: 'Microsoft.App/environments'
+        }
+      }
+    ]
+  }
+}
+
+resource berlinMcpContainerSubnet 'Microsoft.Network/virtualNetworks/subnets@2023-05-01' = {
+  parent: vnet
+  name: 'snet-container-berlin-mcp'
+  dependsOn: [
+    chaosContainerSubnet
+  ]
+  properties: {
+    addressPrefix: berlinMcpContainerSubnetPrefix
+    delegations: [
+      {
+        name: 'Microsoft.App/environments'
+        properties: {
+          serviceName: 'Microsoft.App/environments'
+        }
+      }
+    ]
+  }
+}
 
 // Add App Service subnet with Web Server delegation
 resource appServiceSubnet 'Microsoft.Network/virtualNetworks/subnets@2023-05-01' = {
   parent: vnet
   name: 'snet-app-service'
   dependsOn: [
-    containerSubnet
+    berlinMcpContainerSubnet
   ]
   properties: {
-    addressPrefix: '10.0.5.0/24'
+    addressPrefix: appServiceSubnetPrefix
     networkSecurityGroup: {
       id: nsgAppService.id
-    }
-    routeTable: {
-      id: udrAppService.id
     }
     delegations: [
       {
@@ -265,6 +264,18 @@ resource appServiceSubnet 'Microsoft.Network/virtualNetworks/subnets@2023-05-01'
         }
       }
     ]
+  }
+}
+
+resource privateEndpointSubnet 'Microsoft.Network/virtualNetworks/subnets@2023-05-01' = {
+  parent: vnet
+  name: 'snet-private-endpoints'
+  dependsOn: [
+    appServiceSubnet
+  ]
+  properties: {
+    addressPrefix: privateEndpointSubnetPrefix
+    privateEndpointNetworkPolicies: 'Disabled'
   }
 }
 
@@ -288,11 +299,14 @@ resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
 output vnetId string = vnet.id
 output vnetName string = vnet.name
 output vmSubnetId string = vmSubnet.id
-output containerSubnetId string = containerSubnet.id
-// Note: runnerSubnetId is not output here as the subnet is created by github-runner-network.bicep
+output lisbonContainerSubnetId string = lisbonContainerSubnet.id
+output berlinContainerSubnetId string = berlinContainerSubnet.id
+output chaosContainerSubnetId string = chaosContainerSubnet.id
+output berlinMcpContainerSubnetId string = berlinMcpContainerSubnet.id
 output appServiceSubnetId string = appServiceSubnet.id
+output privateEndpointSubnetName string = privateEndpointSubnet.name
 output logAnalyticsWorkspaceId string = logAnalytics.id
 output logAnalyticsWorkspaceName string = logAnalytics.name
 output logAnalyticsCustomerId string = logAnalytics.properties.customerId
-output natGatewayId string = natGateway.id
-output natGatewayPublicIp string = pipRunnerEgress.properties.ipAddress
+output vmNatGatewayId string = vmNatGateway.id
+output vmNatGatewayPublicIp string = pipVmEgress.properties.ipAddress

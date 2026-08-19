@@ -11,14 +11,20 @@
     "adminUsername": {
       "value": "azureadmin"
     },
-    "adminPassword": {
-      "value": "CHANGE_ME_P@ssw0rd123!"
-    },
     "lisbonContainerImage": {
       "value": "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest"
     },
     "createPublicIps": {
       "value": false
+    },
+    "deployMadridVm": {
+      "value": true
+    },
+    "deployParisVm": {
+      "value": true
+    },
+    "deployBerlinMcp": {
+      "value": true
     },
     "createContainerRegistry": {
       "value": true
@@ -26,20 +32,26 @@
     "containerRegistrySku": {
       "value": "Basic"
     },
-    "deployMadridVm": {
-      "value": true
+    "applicationPrincipalId": {
+      "value": ""
     },
-    "deployParisVm": {
-      "value": false
+    "lisbonContainerSubnetPrefix": {
+      "value": "10.0.2.0/27"
     },
-    "githubActionsPrincipalId": {
-      "value": "49734d7a-0a91-4996-9a7f-df7939bdc8b3"
+    "berlinContainerSubnetPrefix": {
+      "value": "10.0.2.32/27"
     },
-    "runnerSubnetPrefix": {
-      "value": "10.0.4.0/24"
+    "chaosContainerSubnetPrefix": {
+      "value": "10.0.2.64/27"
     },
-    "githubOrgDatabaseId": {
-      "value": "253047645"
+    "berlinMcpContainerSubnetPrefix": {
+      "value": "10.0.2.96/27"
+    },
+    "appServiceSubnetPrefix": {
+      "value": "10.0.5.0/24"
+    },
+    "privateEndpointSubnetPrefix": {
+      "value": "10.0.6.0/27"
     }
   }
 }

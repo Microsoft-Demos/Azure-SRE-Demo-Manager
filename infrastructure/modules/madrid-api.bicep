@@ -22,7 +22,7 @@ param deployVM bool = true
 param tags object = {}
 
 // Public IP (optional)
-resource publicIp 'Microsoft.Network/publicIPAddresses@2023-05-01' = if (createPublicIp) {
+resource publicIp 'Microsoft.Network/publicIPAddresses@2023-05-01' = if (deployVM && createPublicIp) {
   name: 'pip-madrid-vm'
   location: location
   tags: tags
@@ -38,7 +38,7 @@ resource publicIp 'Microsoft.Network/publicIPAddresses@2023-05-01' = if (createP
 }
 
 // Network Interface
-resource nic 'Microsoft.Network/networkInterfaces@2023-05-01' = {
+resource nic 'Microsoft.Network/networkInterfaces@2023-05-01' = if (deployVM) {
   name: 'nic-madrid-vm'
   location: location
   tags: tags
@@ -103,7 +103,7 @@ resource vm 'Microsoft.Compute/virtualMachines@2023-03-01' = if (deployVM) {
     networkProfile: {
       networkInterfaces: [
         {
-          id: nic.id
+          id: nic!.id
         }
       ]
     }
@@ -154,7 +154,7 @@ resource customScriptExtension 'Microsoft.Compute/virtualMachines/extensions@202
 output vmName string = deployVM ? vm!.name : ''
 output vmId string = deployVM ? vm!.id : ''
 output vmPrincipalId string = deployVM ? vm!.identity.principalId : ''
-output privateIpAddress string = nic.properties.ipConfigurations[0].properties.privateIPAddress
+output privateIpAddress string = deployVM ? nic!.properties.ipConfigurations[0].properties.privateIPAddress : ''
 output publicIpAddress string = (deployVM && createPublicIp) ? publicIp!.properties.ipAddress : ''
 output fqdn string = (deployVM && createPublicIp) ? publicIp!.properties.dnsSettings.fqdn : ''
-output apiUrl string = (deployVM && createPublicIp) ? 'http://${publicIp!.properties.dnsSettings.fqdn}:3002' : 'http://${nic.properties.ipConfigurations[0].properties.privateIPAddress}:3002'
+output apiUrl string = !deployVM ? '' : createPublicIp ? 'http://${publicIp!.properties.dnsSettings.fqdn}:3002' : 'http://${nic!.properties.ipConfigurations[0].properties.privateIPAddress}:3002'

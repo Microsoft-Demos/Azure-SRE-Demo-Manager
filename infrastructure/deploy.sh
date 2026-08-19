@@ -28,6 +28,11 @@ if ! command -v az &> /dev/null; then
     exit 1
 fi
 
+if ! command -v jq &> /dev/null; then
+    print_error "jq is required to read the deployment parameters file."
+    exit 1
+fi
+
 print_info "Azure CLI version: $(az --version | head -n 1)"
 
 # Check if Bicep is available
@@ -74,6 +79,20 @@ if [ -z "$ADMIN_PASSWORD" ]; then
     exit 1
 fi
 
+DEPLOY_BERLIN_MCP=$(jq -r '.parameters.deployBerlinMcp.value // false' "$PARAMS_FILE")
+MCP_AUTH_TOKEN=""
+if [ "$DEPLOY_BERLIN_MCP" = "true" ]; then
+    read -sp "Enter Berlin MCP authentication token: " MCP_AUTH_TOKEN
+    echo ""
+
+    if [ -z "$MCP_AUTH_TOKEN" ]; then
+        print_error "MCP authentication token is required when deployBerlinMcp=true."
+        exit 1
+    fi
+fi
+
+APPLICATION_PRINCIPAL_ID="${APPLICATION_PRINCIPAL_ID:-$(jq -r '.parameters.applicationPrincipalId.value // ""' "$PARAMS_FILE")}"
+
 # Validate password complexity
 if [ ${#ADMIN_PASSWORD} -lt 12 ]; then
     print_error "Password must be at least 12 characters long!"
@@ -95,7 +114,7 @@ fi
 DEPLOYMENT_NAME="parking-infra-$(date +%Y%m%d-%H%M%S)"
 
 # Get location from parameters file for validation/deployment location
-LOCATION=$(cat "$PARAMS_FILE" | grep -A 2 '"location"' | grep '"value"' | cut -d'"' -f4)
+LOCATION=$(jq -r '.parameters.location.value // "swedencentral"' "$PARAMS_FILE")
 
 print_info "Starting deployment: $DEPLOYMENT_NAME"
 echo ""
@@ -106,14 +125,19 @@ az bicep build --file main.bicep
 
 # Validate the deployment
 print_info "Validating deployment..."
+set +e
 VALIDATION_OUTPUT=$(az deployment sub validate \
     --location "$LOCATION" \
     --template-file main.bicep \
     --parameters "@$PARAMS_FILE" \
     --parameters adminPassword="$ADMIN_PASSWORD" \
+    --parameters mcpAuthToken="$MCP_AUTH_TOKEN" \
+    --parameters applicationPrincipalId="$APPLICATION_PRINCIPAL_ID" \
     2>&1)
+VALIDATION_EXIT_CODE=$?
+set -e
 
-if [ $? -ne 0 ]; then
+if [ $VALIDATION_EXIT_CODE -ne 0 ]; then
     print_error "Validation failed!"
     echo "$VALIDATION_OUTPUT"
     exit 1
@@ -133,7 +157,9 @@ az deployment sub create \
     --location "$LOCATION" \
     --template-file main.bicep \
     --parameters "@$PARAMS_FILE" \
-    --parameters adminPassword="$ADMIN_PASSWORD"
+    --parameters adminPassword="$ADMIN_PASSWORD" \
+    --parameters mcpAuthToken="$MCP_AUTH_TOKEN" \
+    --parameters applicationPrincipalId="$APPLICATION_PRINCIPAL_ID"
 
 if [ $? -eq 0 ]; then
     print_info "Deployment completed successfully!"

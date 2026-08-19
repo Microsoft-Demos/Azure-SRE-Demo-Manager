@@ -32,7 +32,7 @@ var alertSpecs = [
     severity: 3
     threshold: 0
     query: '''
-LisbonParkingLogs_CL
+union isfuzzy=true LisbonParkingLogs_CL, datatable(TimeGenerated:datetime)[]
 | extend operation = tostring(coalesce(column_ifexists('operation_s', ''), column_ifexists('operation', '')))
 | where operation == 'CHAOS_INJECTED'
 | summarize totalChaosInjected = count() by bin(TimeGenerated, 5m)
@@ -43,9 +43,9 @@ LisbonParkingLogs_CL
     severity: 0
     threshold: 0
     query: '''
-LisbonParkingLogs_CL
+union isfuzzy=true LisbonParkingLogs_CL, datatable(TimeGenerated:datetime)[]
 | extend operation = tostring(coalesce(column_ifexists('operation_s', ''), column_ifexists('operation', '')))
-| where operation == 'CHAOS_INJECTED' and tostring(details_faultType_s) == 'httpError'
+| where operation == 'CHAOS_INJECTED' and tostring(column_ifexists('details_faultType_s', '')) == 'httpError'
 | summarize count() by bin(TimeGenerated, 5m)
 '''
   }
@@ -54,9 +54,9 @@ LisbonParkingLogs_CL
     severity: 2
     threshold: 0
     query: '''
-LisbonParkingLogs_CL
+union isfuzzy=true LisbonParkingLogs_CL, datatable(TimeGenerated:datetime)[]
 | extend operation = tostring(coalesce(column_ifexists('operation_s', ''), column_ifexists('operation', '')))
-| where operation == 'CHAOS_INJECTED' and tostring(details_faultType_s) == 'dependencyFailure'
+| where operation == 'CHAOS_INJECTED' and tostring(column_ifexists('details_faultType_s', '')) == 'dependencyFailure'
 | summarize count() by bin(TimeGenerated, 5m)
 '''
   }
@@ -65,9 +65,9 @@ LisbonParkingLogs_CL
     severity: 2
     threshold: 0
     query: '''
-LisbonParkingLogs_CL
+union isfuzzy=true LisbonParkingLogs_CL, datatable(TimeGenerated:datetime)[]
 | extend operation = tostring(coalesce(column_ifexists('operation_s', ''), column_ifexists('operation', '')))
-| where operation == 'CHAOS_INJECTED' and tostring(details_faultType_s) == 'httpsError'
+| where operation == 'CHAOS_INJECTED' and tostring(column_ifexists('details_faultType_s', '')) == 'httpsError'
 | summarize count() by bin(TimeGenerated, 5m)
 '''
   }
@@ -76,9 +76,9 @@ LisbonParkingLogs_CL
     severity: 1
     threshold: 0
     query: '''
-LisbonParkingLogs_CL
+union isfuzzy=true LisbonParkingLogs_CL, datatable(TimeGenerated:datetime)[]
 | extend operation = tostring(coalesce(column_ifexists('operation_s', ''), column_ifexists('operation', '')))
-| where operation == 'CHAOS_INJECTED' and tostring(details_faultType_s) == 'exception'
+| where operation == 'CHAOS_INJECTED' and tostring(column_ifexists('details_faultType_s', '')) == 'exception'
 | summarize count() by bin(TimeGenerated, 5m)
 '''
   }
@@ -87,9 +87,9 @@ LisbonParkingLogs_CL
     severity: 2
     threshold: 0
     query: '''
-LisbonParkingLogs_CL
+union isfuzzy=true LisbonParkingLogs_CL, datatable(TimeGenerated:datetime)[]
 | extend operation = tostring(coalesce(column_ifexists('operation_s', ''), column_ifexists('operation', '')))
-| where operation == 'CHAOS_INJECTED' and tostring(details_faultType_s) == 'disconnect'
+| where operation == 'CHAOS_INJECTED' and tostring(column_ifexists('details_faultType_s', '')) == 'disconnect'
 | summarize count() by bin(TimeGenerated, 5m)
 '''
   }
@@ -98,9 +98,9 @@ LisbonParkingLogs_CL
     severity: 2
     threshold: 0
     query: '''
-LisbonParkingLogs_CL
+union isfuzzy=true LisbonParkingLogs_CL, datatable(TimeGenerated:datetime)[]
 | extend operation = tostring(coalesce(column_ifexists('operation_s', ''), column_ifexists('operation', '')))
-| where operation == 'CHAOS_INJECTED' and tostring(details_faultType_s) == 'timeout'
+| where operation == 'CHAOS_INJECTED' and tostring(column_ifexists('details_faultType_s', '')) == 'timeout'
 | summarize count() by bin(TimeGenerated, 5m)
 '''
   }
@@ -109,9 +109,9 @@ LisbonParkingLogs_CL
     severity: 2
     threshold: 0
     query: '''
-LisbonParkingLogs_CL
+union isfuzzy=true LisbonParkingLogs_CL, datatable(TimeGenerated:datetime)[]
 | extend operation = tostring(coalesce(column_ifexists('operation_s', ''), column_ifexists('operation', '')))
-| where operation == 'CHAOS_INJECTED' and tostring(details_faultType_s) == 'badPayload'
+| where operation == 'CHAOS_INJECTED' and tostring(column_ifexists('details_faultType_s', '')) == 'badPayload'
 | summarize count() by bin(TimeGenerated, 5m)
 '''
   }
@@ -120,9 +120,9 @@ LisbonParkingLogs_CL
     severity: 2
     threshold: 0
     query: '''
-LisbonParkingLogs_CL
+union isfuzzy=true LisbonParkingLogs_CL, datatable(TimeGenerated:datetime)[]
 | extend operation = tostring(coalesce(column_ifexists('operation_s', ''), column_ifexists('operation', '')))
-| where operation == 'CHAOS_INJECTED' and tostring(details_faultType_s) == 'highCpu'
+| where operation == 'CHAOS_INJECTED' and tostring(column_ifexists('details_faultType_s', '')) == 'highCpu'
 | summarize count() by bin(TimeGenerated, 5m)
 '''
   }
@@ -131,9 +131,9 @@ LisbonParkingLogs_CL
     severity: 2
     threshold: 0
     query: '''
-LisbonParkingLogs_CL
+union isfuzzy=true LisbonParkingLogs_CL, datatable(TimeGenerated:datetime)[]
 | extend operation = tostring(coalesce(column_ifexists('operation_s', ''), column_ifexists('operation', '')))
-| where operation == 'CHAOS_INJECTED' and tostring(details_faultType_s) == 'highMemory'
+| where operation == 'CHAOS_INJECTED' and tostring(column_ifexists('details_faultType_s', '')) == 'highMemory'
 | summarize count() by bin(TimeGenerated, 5m)
 '''
   }
@@ -142,7 +142,7 @@ LisbonParkingLogs_CL
     severity: 2
     threshold: 0
     query: '''
-LisbonParkingLogs_CL
+union isfuzzy=true LisbonParkingLogs_CL, datatable(TimeGenerated:datetime)[]
 | extend operation = tostring(coalesce(column_ifexists('operation_s', ''), column_ifexists('operation', '')))
 | extend responseTimeMs = todouble(coalesce(column_ifexists('responseTimeMs_d', real(null)), column_ifexists('responseTimeMs', real(null))))
 | where operation == 'HTTP_RESPONSE' and isnotnull(responseTimeMs)
@@ -155,7 +155,7 @@ LisbonParkingLogs_CL
     severity: 2
     threshold: 0
     query: '''
-LisbonParkingLogs_CL
+union isfuzzy=true LisbonParkingLogs_CL, datatable(TimeGenerated:datetime)[]
 | extend operation = tostring(coalesce(column_ifexists('operation_s', ''), column_ifexists('operation', '')))
 | extend statusCode = coalesce(toint(column_ifexists('statusCode_d', real(null))), toint(column_ifexists('statusCode', int(null))))
 | where operation == 'HTTP_RESPONSE'

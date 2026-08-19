@@ -4,8 +4,8 @@
   "metadata": {
     "_generator": {
       "name": "bicep",
-      "version": "0.40.2.10011",
-      "templateHash": "15979375976132433706"
+      "version": "0.39.26.7824",
+      "templateHash": "7247288335295563539"
     }
   },
   "parameters": {
@@ -29,16 +29,51 @@
         "description": "Subnet address prefix for VMs"
       }
     },
-    "containerSubnetPrefix": {
+    "lisbonContainerSubnetPrefix": {
       "type": "string",
-      "defaultValue": "10.0.2.0/23",
+      "defaultValue": "10.0.2.0/27",
       "metadata": {
-        "description": "Subnet address prefix for Container Apps"
+        "description": "Exclusive subnet address prefix for the Lisbon Container Apps environment"
+      }
+    },
+    "berlinContainerSubnetPrefix": {
+      "type": "string",
+      "defaultValue": "10.0.2.32/27",
+      "metadata": {
+        "description": "Exclusive subnet address prefix for the Berlin Container Apps environment"
+      }
+    },
+    "chaosContainerSubnetPrefix": {
+      "type": "string",
+      "defaultValue": "10.0.2.64/27",
+      "metadata": {
+        "description": "Exclusive subnet address prefix for the Chaos Container Apps environment"
+      }
+    },
+    "berlinMcpContainerSubnetPrefix": {
+      "type": "string",
+      "defaultValue": "10.0.2.96/27",
+      "metadata": {
+        "description": "Exclusive subnet address prefix for the Berlin MCP Container Apps environment"
+      }
+    },
+    "appServiceSubnetPrefix": {
+      "type": "string",
+      "defaultValue": "10.0.5.0/24",
+      "metadata": {
+        "description": "Subnet address prefix for App Service VNet integration"
+      }
+    },
+    "privateEndpointSubnetPrefix": {
+      "type": "string",
+      "defaultValue": "10.0.6.0/27",
+      "metadata": {
+        "description": "Subnet address prefix for private endpoints"
       }
     },
     "allowedSourceIpPrefix": {
       "type": "string",
-      "defaultValue": "*",
+      "defaultValue": "VirtualNetwork",
       "metadata": {
         "description": "Allowed source IP address prefix for SSH/RDP access. Use specific IP ranges in production."
       }
@@ -71,54 +106,28 @@
       "properties": {
         "securityRules": [
           {
-            "name": "AllowHTTP",
+            "name": "AllowAPIPort3002",
             "properties": {
               "priority": 100,
               "direction": "Inbound",
               "access": "Allow",
               "protocol": "Tcp",
               "sourcePortRange": "*",
-              "destinationPortRange": "80",
-              "sourceAddressPrefix": "*",
-              "destinationAddressPrefix": "*"
-            }
-          },
-          {
-            "name": "AllowHTTPS",
-            "properties": {
-              "priority": 110,
-              "direction": "Inbound",
-              "access": "Allow",
-              "protocol": "Tcp",
-              "sourcePortRange": "*",
-              "destinationPortRange": "443",
-              "sourceAddressPrefix": "*",
-              "destinationAddressPrefix": "*"
-            }
-          },
-          {
-            "name": "AllowAPIPort3002",
-            "properties": {
-              "priority": 120,
-              "direction": "Inbound",
-              "access": "Allow",
-              "protocol": "Tcp",
-              "sourcePortRange": "*",
               "destinationPortRange": "3002",
-              "sourceAddressPrefix": "*",
+              "sourceAddressPrefix": "VirtualNetwork",
               "destinationAddressPrefix": "*"
             }
           },
           {
             "name": "AllowAPIPort3003",
             "properties": {
-              "priority": 130,
+              "priority": 110,
               "direction": "Inbound",
               "access": "Allow",
               "protocol": "Tcp",
               "sourcePortRange": "*",
               "destinationPortRange": "3003",
-              "sourceAddressPrefix": "*",
+              "sourceAddressPrefix": "VirtualNetwork",
               "destinationAddressPrefix": "*"
             }
           },
@@ -154,7 +163,7 @@
     {
       "type": "Microsoft.Network/publicIPAddresses",
       "apiVersion": "2023-05-01",
-      "name": "pip-github-runners-egress",
+      "name": "pip-vm-egress",
       "location": "[parameters('location')]",
       "tags": "[parameters('tags')]",
       "sku": {
@@ -164,17 +173,12 @@
         "publicIPAllocationMethod": "Static",
         "publicIPAddressVersion": "IPv4",
         "idleTimeoutInMinutes": 10
-      },
-      "zones": [
-        "1",
-        "2",
-        "3"
-      ]
+      }
     },
     {
       "type": "Microsoft.Network/natGateways",
       "apiVersion": "2023-05-01",
-      "name": "ngw-github-runners",
+      "name": "ngw-vm-egress",
       "location": "[parameters('location')]",
       "tags": "[parameters('tags')]",
       "sku": {
@@ -183,50 +187,14 @@
       "properties": {
         "publicIpAddresses": [
           {
-            "id": "[resourceId('Microsoft.Network/publicIPAddresses', 'pip-github-runners-egress')]"
+            "id": "[resourceId('Microsoft.Network/publicIPAddresses', 'pip-vm-egress')]"
           }
         ],
         "idleTimeoutInMinutes": 10
       },
       "dependsOn": [
-        "[resourceId('Microsoft.Network/publicIPAddresses', 'pip-github-runners-egress')]"
+        "[resourceId('Microsoft.Network/publicIPAddresses', 'pip-vm-egress')]"
       ]
-    },
-    {
-      "type": "Microsoft.Network/routeTables",
-      "apiVersion": "2023-05-01",
-      "name": "udr-vms",
-      "location": "[parameters('location')]",
-      "tags": "[parameters('tags')]",
-      "properties": {
-        "routes": [
-          {
-            "name": "route-to-app-service",
-            "properties": {
-              "addressPrefix": "10.0.5.0/24",
-              "nextHopType": "VnetLocal"
-            }
-          }
-        ]
-      }
-    },
-    {
-      "type": "Microsoft.Network/routeTables",
-      "apiVersion": "2023-05-01",
-      "name": "udr-app-service",
-      "location": "[parameters('location')]",
-      "tags": "[parameters('tags')]",
-      "properties": {
-        "routes": [
-          {
-            "name": "route-to-vms",
-            "properties": {
-              "addressPrefix": "10.0.1.0/24",
-              "nextHopType": "VnetLocal"
-            }
-          }
-        ]
-      }
     },
     {
       "type": "Microsoft.Network/virtualNetworks",
@@ -251,22 +219,22 @@
         "networkSecurityGroup": {
           "id": "[resourceId('Microsoft.Network/networkSecurityGroups', 'nsg-vms')]"
         },
-        "routeTable": {
-          "id": "[resourceId('Microsoft.Network/routeTables', 'udr-vms')]"
+        "natGateway": {
+          "id": "[resourceId('Microsoft.Network/natGateways', 'ngw-vm-egress')]"
         }
       },
       "dependsOn": [
         "[resourceId('Microsoft.Network/networkSecurityGroups', 'nsg-vms')]",
-        "[resourceId('Microsoft.Network/routeTables', 'udr-vms')]",
+        "[resourceId('Microsoft.Network/natGateways', 'ngw-vm-egress')]",
         "[resourceId('Microsoft.Network/virtualNetworks', 'vnet-parking-hub')]"
       ]
     },
     {
       "type": "Microsoft.Network/virtualNetworks/subnets",
       "apiVersion": "2023-05-01",
-      "name": "[format('{0}/{1}', 'vnet-parking-hub', 'snet-container-apps')]",
+      "name": "[format('{0}/{1}', 'vnet-parking-hub', 'snet-container-lisbon')]",
       "properties": {
-        "addressPrefix": "[parameters('containerSubnetPrefix')]",
+        "addressPrefix": "[parameters('lisbonContainerSubnetPrefix')]",
         "delegations": [
           {
             "name": "Microsoft.App/environments",
@@ -284,14 +252,71 @@
     {
       "type": "Microsoft.Network/virtualNetworks/subnets",
       "apiVersion": "2023-05-01",
+      "name": "[format('{0}/{1}', 'vnet-parking-hub', 'snet-container-berlin')]",
+      "properties": {
+        "addressPrefix": "[parameters('berlinContainerSubnetPrefix')]",
+        "delegations": [
+          {
+            "name": "Microsoft.App/environments",
+            "properties": {
+              "serviceName": "Microsoft.App/environments"
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'vnet-parking-hub', 'snet-container-lisbon')]",
+        "[resourceId('Microsoft.Network/virtualNetworks', 'vnet-parking-hub')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/virtualNetworks/subnets",
+      "apiVersion": "2023-05-01",
+      "name": "[format('{0}/{1}', 'vnet-parking-hub', 'snet-container-chaos')]",
+      "properties": {
+        "addressPrefix": "[parameters('chaosContainerSubnetPrefix')]",
+        "delegations": [
+          {
+            "name": "Microsoft.App/environments",
+            "properties": {
+              "serviceName": "Microsoft.App/environments"
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'vnet-parking-hub', 'snet-container-berlin')]",
+        "[resourceId('Microsoft.Network/virtualNetworks', 'vnet-parking-hub')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/virtualNetworks/subnets",
+      "apiVersion": "2023-05-01",
+      "name": "[format('{0}/{1}', 'vnet-parking-hub', 'snet-container-berlin-mcp')]",
+      "properties": {
+        "addressPrefix": "[parameters('berlinMcpContainerSubnetPrefix')]",
+        "delegations": [
+          {
+            "name": "Microsoft.App/environments",
+            "properties": {
+              "serviceName": "Microsoft.App/environments"
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'vnet-parking-hub', 'snet-container-chaos')]",
+        "[resourceId('Microsoft.Network/virtualNetworks', 'vnet-parking-hub')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/virtualNetworks/subnets",
+      "apiVersion": "2023-05-01",
       "name": "[format('{0}/{1}', 'vnet-parking-hub', 'snet-app-service')]",
       "properties": {
-        "addressPrefix": "10.0.5.0/24",
+        "addressPrefix": "[parameters('appServiceSubnetPrefix')]",
         "networkSecurityGroup": {
           "id": "[resourceId('Microsoft.Network/networkSecurityGroups', 'nsg-app-service')]"
-        },
-        "routeTable": {
-          "id": "[resourceId('Microsoft.Network/routeTables', 'udr-app-service')]"
         },
         "delegations": [
           {
@@ -303,9 +328,21 @@
         ]
       },
       "dependsOn": [
-        "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'vnet-parking-hub', 'snet-container-apps')]",
+        "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'vnet-parking-hub', 'snet-container-berlin-mcp')]",
         "[resourceId('Microsoft.Network/networkSecurityGroups', 'nsg-app-service')]",
-        "[resourceId('Microsoft.Network/routeTables', 'udr-app-service')]",
+        "[resourceId('Microsoft.Network/virtualNetworks', 'vnet-parking-hub')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/virtualNetworks/subnets",
+      "apiVersion": "2023-05-01",
+      "name": "[format('{0}/{1}', 'vnet-parking-hub', 'snet-private-endpoints')]",
+      "properties": {
+        "addressPrefix": "[parameters('privateEndpointSubnetPrefix')]",
+        "privateEndpointNetworkPolicies": "Disabled"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'vnet-parking-hub', 'snet-app-service')]",
         "[resourceId('Microsoft.Network/virtualNetworks', 'vnet-parking-hub')]"
       ]
     },
@@ -339,13 +376,29 @@
       "type": "string",
       "value": "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'vnet-parking-hub', 'snet-vms')]"
     },
-    "containerSubnetId": {
+    "lisbonContainerSubnetId": {
       "type": "string",
-      "value": "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'vnet-parking-hub', 'snet-container-apps')]"
+      "value": "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'vnet-parking-hub', 'snet-container-lisbon')]"
+    },
+    "berlinContainerSubnetId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'vnet-parking-hub', 'snet-container-berlin')]"
+    },
+    "chaosContainerSubnetId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'vnet-parking-hub', 'snet-container-chaos')]"
+    },
+    "berlinMcpContainerSubnetId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'vnet-parking-hub', 'snet-container-berlin-mcp')]"
     },
     "appServiceSubnetId": {
       "type": "string",
       "value": "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'vnet-parking-hub', 'snet-app-service')]"
+    },
+    "privateEndpointSubnetName": {
+      "type": "string",
+      "value": "snet-private-endpoints"
     },
     "logAnalyticsWorkspaceId": {
       "type": "string",
@@ -359,13 +412,13 @@
       "type": "string",
       "value": "[reference(resourceId('Microsoft.OperationalInsights/workspaces', 'law-parking-hub'), '2022-10-01').customerId]"
     },
-    "natGatewayId": {
+    "vmNatGatewayId": {
       "type": "string",
-      "value": "[resourceId('Microsoft.Network/natGateways', 'ngw-github-runners')]"
+      "value": "[resourceId('Microsoft.Network/natGateways', 'ngw-vm-egress')]"
     },
-    "natGatewayPublicIp": {
+    "vmNatGatewayPublicIp": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Network/publicIPAddresses', 'pip-github-runners-egress'), '2023-05-01').ipAddress]"
+      "value": "[reference(resourceId('Microsoft.Network/publicIPAddresses', 'pip-vm-egress'), '2023-05-01').ipAddress]"
     }
   }
 }

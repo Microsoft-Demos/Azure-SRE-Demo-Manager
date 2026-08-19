@@ -61,6 +61,12 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
   properties: {
     environmentId: containerAppEnvironment.id
     configuration: {
+      secrets: [
+        {
+          name: 'log-analytics-shared-key'
+          value: listKeys(logAnalyticsWorkspaceId, '2022-10-01').primarySharedKey
+        }
+      ]
       ingress: {
         external: true
         targetPort: 3001
@@ -102,7 +108,7 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
             }
             {
               name: 'SHARED_KEY'
-              value: listKeys(logAnalyticsWorkspaceId, '2022-10-01').primarySharedKey
+              secretRef: 'log-analytics-shared-key'
             }
             {
               name: 'LOG_TYPE'

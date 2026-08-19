@@ -16,12 +16,12 @@ on:
         description: 'Azure region for deployment'
         required: true
         type: string
-        default: 'westeurope'
+        default: 'swedencentral'
       parametersFile:
         description: 'Parameters file path (relative to repository root)'
         required: true
         type: string
-        default: 'infrastructure/main.parameters.json'
+        default: 'infrastructure/main.parameters.example.json'
       confirmDeployment:
         description: 'Type "DEPLOY" to confirm deployment'
         required: true
@@ -29,16 +29,19 @@ on:
 
 jobs:
   validate-input:
+    if: github.ref == 'refs/heads/main' && vars.AZURE_INFRA_DEPLOYMENTS_ENABLED == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
     outputs:
       proceed: ${{ steps.check.outputs.proceed }}
+    env:
+      INPUT_CONFIRM_DEPLOYMENT: ${{ inputs.confirmDeployment }}
     steps:
       - name: Validate confirmation
         id: check
         run: |
-          if [ "${{ inputs.confirmDeployment }}" != "DEPLOY" ]; then
+          if [ "$INPUT_CONFIRM_DEPLOYMENT" != "DEPLOY" ]; then
             echo "❌ Deployment cancelled: confirmation not provided"
             echo "Please enter 'DEPLOY' to confirm the deployment"
             exit 1
@@ -46,52 +49,80 @@ jobs:
           echo "proceed=true" >> $GITHUB_OUTPUT
 
   deploy:
+    if: github.ref == 'refs/heads/main' && vars.AZURE_INFRA_DEPLOYMENTS_ENABLED == 'true'
     runs-on: ubuntu-latest
     needs: validate-input
     environment: ${{ inputs.environment }}
     permissions:
       contents: read
       id-token: write
+    env:
+      ADMIN_PASSWORD: ${{ secrets.AZURE_VM_ADMIN_PASSWORD }}
+      MCP_AUTH_TOKEN: ${{ secrets.MCP_AUTH_TOKEN }}
+      AZURE_APP_PRINCIPAL_OBJECT_ID: ${{ vars.AZURE_APP_PRINCIPAL_OBJECT_ID }}
+      SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      INPUT_ENVIRONMENT: ${{ inputs.environment }}
+      INPUT_LOCATION: ${{ inputs.location }}
+      INPUT_PARAMETERS_FILE: ${{ inputs.parametersFile }}
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Log in to Azure
-        uses: azure/login@v1
+        uses: azure/login@v2
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          client-id: ${{ vars.AZURE_INFRA_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Validate required secrets
+        run: |
+          if [ -z "$ADMIN_PASSWORD" ]; then
+            echo "AZURE_VM_ADMIN_PASSWORD is required"
+            exit 1
+          fi
+          if [[ ! "$INPUT_LOCATION" =~ ^[a-z0-9]+$ ]]; then
+            echo "Location must be a canonical Azure region name"
+            exit 1
+          fi
+          if [[ ! "$INPUT_PARAMETERS_FILE" =~ ^infrastructure/[A-Za-z0-9._/-]+\.json$ ]] || [[ "$INPUT_PARAMETERS_FILE" == *".."* ]]; then
+            echo "Parameters file must be a JSON file under infrastructure/"
+            exit 1
+          fi
+          if [ ! -f "$INPUT_PARAMETERS_FILE" ]; then
+            echo "Parameters file not found: $INPUT_PARAMETERS_FILE"
+            exit 1
+          fi
+          if ! jq empty "$INPUT_PARAMETERS_FILE" 2>/dev/null; then
+            echo "Parameters file is not valid JSON"
+            exit 1
+          fi
+
+          DEPLOY_BERLIN_MCP=$(jq -r '.parameters.deployBerlinMcp.value // false' "$INPUT_PARAMETERS_FILE")
+          if [ "$DEPLOY_BERLIN_MCP" = "true" ] && [ -z "$MCP_AUTH_TOKEN" ]; then
+            echo "MCP_AUTH_TOKEN is required by the full-demo parameter example"
+            exit 1
+          fi
+          if [ -z "$AZURE_APP_PRINCIPAL_OBJECT_ID" ] || [ -z "$SUBSCRIPTION_ID" ]; then
+            echo "AZURE_APP_PRINCIPAL_OBJECT_ID and AZURE_SUBSCRIPTION_ID are required"
+            exit 1
+          fi
 
       - name: Extract subscription ID
         id: extract-sub
         run: |
-          SUBSCRIPTION_ID=$(echo '${{ secrets.AZURE_CREDENTIALS }}' | jq -r '.subscriptionId')
           echo "subscription-id=$SUBSCRIPTION_ID" >> $GITHUB_OUTPUT
           echo "Using subscription: $SUBSCRIPTION_ID"
-
-      - name: Validate parameters file
-        run: |
-          if [ ! -f "${{ inputs.parametersFile }}" ]; then
-            echo "❌ Parameters file not found: ${{ inputs.parametersFile }}"
-            exit 1
-          fi
-          echo "✅ Parameters file found: ${{ inputs.parametersFile }}"
-          
-          # Validate it's valid JSON
-          if ! jq empty "${{ inputs.parametersFile }}" 2>/dev/null; then
-            echo "❌ Parameters file is not valid JSON"
-            exit 1
-          fi
-          echo "✅ Parameters file is valid JSON"
 
       - name: Display deployment configuration
         run: |
           echo "### Deployment Configuration" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Environment**: ${{ inputs.environment }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Location**: ${{ inputs.location }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: $INPUT_ENVIRONMENT" >> $GITHUB_STEP_SUMMARY
+          echo "- **Location**: $INPUT_LOCATION" >> $GITHUB_STEP_SUMMARY
           echo "- **Template**: \`infrastructure/main.bicep\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Parameters**: \`${{ inputs.parametersFile }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Parameters**: \`$INPUT_PARAMETERS_FILE\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Subscription**: ${{ steps.extract-sub.outputs.subscription-id }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Target Scope**: Subscription" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -99,19 +130,26 @@ jobs:
       - name: Run pre-deployment What-If
         id: whatif
         run: |
-          DEPLOYMENT_NAME="infra-deploy-${{ inputs.environment }}-$(date +%Y%m%d-%H%M%S)"
+          DEPLOYMENT_NAME="infra-deploy-${INPUT_ENVIRONMENT}-$(date +%Y%m%d-%H%M%S)"
           
           echo "Running What-If analysis before deployment..."
           set +e  # Don't exit on error, we'll handle it
           az deployment sub what-if \
             --name "$DEPLOYMENT_NAME" \
-            --location "${{ inputs.location }}" \
+            --location "$INPUT_LOCATION" \
             --template-file infrastructure/main.bicep \
-            --parameters "${{ inputs.parametersFile }}" \
+            --parameters "$INPUT_PARAMETERS_FILE" \
+            --parameters adminPassword="WhatIfOnly-${GITHUB_RUN_ID}-Aa1!" \
+            --parameters mcpAuthToken="WhatIfOnly-${GITHUB_RUN_ID}-McpToken-Aa1!" \
+            --parameters applicationPrincipalId="$AZURE_APP_PRINCIPAL_OBJECT_ID" \
+            --parameters environment="$INPUT_ENVIRONMENT" \
+            --parameters location="$INPUT_LOCATION" \
             --subscription "${{ steps.extract-sub.outputs.subscription-id }}" \
-            > whatif-output.txt 2>&1
-          WHATIF_EXIT_CODE=$?
-          set -e
+            > whatif-output.txt 2>&1 || {
+              cat whatif-output.txt
+              exit 1
+            }
+          WHATIF_EXIT_CODE=0
           
           echo "deployment-name=$DEPLOYMENT_NAME" >> $GITHUB_OUTPUT
           echo "whatif-exit-code=$WHATIF_EXIT_CODE" >> $GITHUB_OUTPUT
@@ -119,13 +157,6 @@ jobs:
           if [ -f whatif-output.txt ]; then
             echo "### Pre-Deployment What-If Analysis" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            
-            if [ $WHATIF_EXIT_CODE -ne 0 ]; then
-              echo "⚠️ **Warning**: What-If analysis encountered errors (exit code: $WHATIF_EXIT_CODE)" >> $GITHUB_STEP_SUMMARY
-              echo "" >> $GITHUB_STEP_SUMMARY
-              echo "The deployment will still proceed. Review the errors below:" >> $GITHUB_STEP_SUMMARY
-              echo "" >> $GITHUB_STEP_SUMMARY
-            fi
             
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
             head -n 50 whatif-output.txt >> $GITHUB_STEP_SUMMARY
@@ -140,15 +171,20 @@ jobs:
           
           echo "Starting deployment..."
           echo "Deployment: $DEPLOYMENT_NAME"
-          echo "Location: ${{ inputs.location }}"
-          echo "Environment: ${{ inputs.environment }}"
+          echo "Location: $INPUT_LOCATION"
+          echo "Environment: $INPUT_ENVIRONMENT"
           
           # Deploy the infrastructure
           az deployment sub create \
             --name "$DEPLOYMENT_NAME" \
-            --location "${{ inputs.location }}" \
+            --location "$INPUT_LOCATION" \
             --template-file infrastructure/main.bicep \
-            --parameters "${{ inputs.parametersFile }}" \
+            --parameters "$INPUT_PARAMETERS_FILE" \
+            --parameters adminPassword="$ADMIN_PASSWORD" \
+            --parameters mcpAuthToken="$MCP_AUTH_TOKEN" \
+            --parameters applicationPrincipalId="$AZURE_APP_PRINCIPAL_OBJECT_ID" \
+            --parameters environment="$INPUT_ENVIRONMENT" \
+            --parameters location="$INPUT_LOCATION" \
             --subscription "${{ steps.extract-sub.outputs.subscription-id }}" \
             --output json > deployment-output.json
           
@@ -188,8 +224,8 @@ jobs:
             echo "### ✅ Deployment Successful!" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "- **Deployment Name**: ${{ steps.whatif.outputs.deployment-name }}" >> $GITHUB_STEP_SUMMARY
-            echo "- **Environment**: ${{ inputs.environment }}" >> $GITHUB_STEP_SUMMARY
-            echo "- **Location**: ${{ inputs.location }}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Environment**: $INPUT_ENVIRONMENT" >> $GITHUB_STEP_SUMMARY
+            echo "- **Location**: $INPUT_LOCATION" >> $GITHUB_STEP_SUMMARY
             echo "- **State**: ${{ steps.deploy.outputs.deployment-state }}" >> $GITHUB_STEP_SUMMARY
             echo "- **Deployment ID**: ${{ steps.deploy.outputs.deployment-id }}" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
@@ -209,7 +245,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
           echo "- Verify resources in the Azure Portal" >> $GITHUB_STEP_SUMMARY
-          echo "- Check resource group: \`rg-parking-*-${{ inputs.environment }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Check resource group: \`rg-parking-*-$INPUT_ENVIRONMENT\`" >> $GITHUB_STEP_SUMMARY
           echo "- Review deployment logs in the Azure Portal if needed" >> $GITHUB_STEP_SUMMARY
 
       - name: Upload deployment artifacts

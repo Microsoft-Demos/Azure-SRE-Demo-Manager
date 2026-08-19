@@ -35,7 +35,7 @@ param vmHealthControlContainerImage string = 'mcr.microsoft.com/azuredocs/contai
 param containerRegistry string = ''
 
 @description('Create public IPs for VMs')
-param createPublicIps bool = true
+param createPublicIps bool = false
 
 @description('Deploy or skip the Madrid VM and its extensions')
 param deployMadridVm bool = true
@@ -52,17 +52,26 @@ param vnetAddressPrefix string = '10.0.0.0/16'
 @description('Subnet address prefix for VMs')
 param vmSubnetPrefix string = '10.0.1.0/24'
 
-@description('Subnet address prefix for Container Apps')
-param containerSubnetPrefix string = '10.0.2.0/23'
+@description('Exclusive subnet address prefix for the Lisbon Container Apps environment')
+param lisbonContainerSubnetPrefix string = '10.0.2.0/27'
+
+@description('Exclusive subnet address prefix for the Berlin Container Apps environment')
+param berlinContainerSubnetPrefix string = '10.0.2.32/27'
+
+@description('Exclusive subnet address prefix for the Chaos Container Apps environment')
+param chaosContainerSubnetPrefix string = '10.0.2.64/27'
+
+@description('Exclusive subnet address prefix for the Berlin MCP Container Apps environment')
+param berlinMcpContainerSubnetPrefix string = '10.0.2.96/27'
+
+@description('Subnet address prefix for App Service VNet integration')
+param appServiceSubnetPrefix string = '10.0.5.0/24'
+
+@description('Subnet address prefix for private endpoints')
+param privateEndpointSubnetPrefix string = '10.0.6.0/27'
 
 @description('Allowed source IP address prefix for SSH/RDP access (use specific IPs in production)')
-param allowedSourceIpPrefix string = '*'
-
-@description('Subnet address prefix for GitHub-hosted runners')
-param runnerSubnetPrefix string = '10.0.3.0/24'
-
-@description('GitHub organization databaseId for runner networking (GraphQL)')
-param githubOrgDatabaseId string = ''
+param allowedSourceIpPrefix string = 'VirtualNetwork'
 
 @description('Create a private Azure Container Registry')
 param createContainerRegistry bool = true
@@ -75,8 +84,12 @@ param createContainerRegistry bool = true
 ])
 param containerRegistrySku string = 'Basic'
 
-@description('GitHub Actions Service Principal Object ID (for deployment storage access)')
-param githubActionsPrincipalId string = ''
+@description('GitHub application deployment service principal object ID')
+param applicationPrincipalId string = ''
+
+@description('Authentication token for the optional Berlin MCP server')
+@secure()
+param mcpAuthToken string = ''
 
 // Common tags
 var tags = {
@@ -158,25 +171,13 @@ module hub 'modules/hub.bicep' = {
     location: location
     vnetAddressPrefix: vnetAddressPrefix
     vmSubnetPrefix: vmSubnetPrefix
-    containerSubnetPrefix: containerSubnetPrefix
+    lisbonContainerSubnetPrefix: lisbonContainerSubnetPrefix
+    berlinContainerSubnetPrefix: berlinContainerSubnetPrefix
+    chaosContainerSubnetPrefix: chaosContainerSubnetPrefix
+    berlinMcpContainerSubnetPrefix: berlinMcpContainerSubnetPrefix
+    appServiceSubnetPrefix: appServiceSubnetPrefix
+    privateEndpointSubnetPrefix: privateEndpointSubnetPrefix
     allowedSourceIpPrefix: allowedSourceIpPrefix
-    tags: tags
-  }
-}
-
-// ========================================
-// GitHub-hosted Runners Private Networking
-// ========================================
-
-module githubRunners 'modules/github-runner-network.bicep' = if (!empty(githubOrgDatabaseId)) {
-  scope: hubRg
-  name: 'github-runners-network'
-  params: {
-    location: location
-    vnetName: hub.outputs.vnetName
-    runnerSubnetPrefix: runnerSubnetPrefix
-    githubOrgDatabaseId: githubOrgDatabaseId
-    natGatewayId: hub.outputs.natGatewayId
     tags: tags
   }
 }
@@ -201,18 +202,18 @@ module storagePrivateEndpoint 'modules/storage-private-endpoint.bicep' = {
   params: {
     location: location
     vnetName: hub.outputs.vnetName
-    subnetName: 'snet-vms'
+    subnetName: hub.outputs.privateEndpointSubnetName
     storageAccountId: deploymentStorage.outputs.storageAccountId
     tags: tags
   }
 }
 
 // Grant GitHub Actions SP access to deployment storage
-module spStorageAccess 'modules/sp-storage-access.bicep' = if (!empty(githubActionsPrincipalId)) {
+module spStorageAccess 'modules/sp-storage-access.bicep' = if (!empty(applicationPrincipalId)) {
   scope: hubRg
   name: 'sp-storage-access'
   params: {
-    principalId: githubActionsPrincipalId
+    principalId: applicationPrincipalId
     storageAccountId: deploymentStorage.outputs.storageAccountId
   }
 }
@@ -228,8 +229,82 @@ module acr 'modules/container-registry.bicep' = if (createContainerRegistry) {
     location: location
     environment: environment
     sku: containerRegistrySku
-    adminUserEnabled: true
+    adminUserEnabled: false
     tags: tags
+  }
+}
+
+module githubActionsAcrPush 'modules/acr-role-assignment.bicep' = if (createContainerRegistry && !empty(applicationPrincipalId)) {
+  scope: hubRg
+  name: 'github-actions-acr-push'
+  params: {
+    principalId: applicationPrincipalId
+    acrName: acr!.outputs.registryName
+    roleDefinitionId: '8311e382-0749-4cb8-b61a-304f252e45ec' // AcrPush
+  }
+}
+
+module applicationHubAccess 'modules/resource-group-role-assignment.bicep' = if (!empty(applicationPrincipalId)) {
+  scope: hubRg
+  name: 'application-hub-contributor'
+  params: {
+    principalId: applicationPrincipalId
+  }
+}
+
+module applicationFrontendAccess 'modules/resource-group-role-assignment.bicep' = if (!empty(applicationPrincipalId)) {
+  scope: frontendRg
+  name: 'application-frontend-contributor'
+  params: {
+    principalId: applicationPrincipalId
+  }
+}
+
+module applicationLisbonAccess 'modules/resource-group-role-assignment.bicep' = if (!empty(applicationPrincipalId)) {
+  scope: lisbonRg
+  name: 'application-lisbon-contributor'
+  params: {
+    principalId: applicationPrincipalId
+  }
+}
+
+module applicationBerlinAccess 'modules/resource-group-role-assignment.bicep' = if (!empty(applicationPrincipalId)) {
+  scope: berlinRg
+  name: 'application-berlin-contributor'
+  params: {
+    principalId: applicationPrincipalId
+  }
+}
+
+module applicationChaosAccess 'modules/resource-group-role-assignment.bicep' = if (!empty(applicationPrincipalId)) {
+  scope: chaosControlRg
+  name: 'application-chaos-contributor'
+  params: {
+    principalId: applicationPrincipalId
+  }
+}
+
+module applicationMadridAccess 'modules/resource-group-role-assignment.bicep' = if (!empty(applicationPrincipalId)) {
+  scope: madridRg
+  name: 'application-madrid-contributor'
+  params: {
+    principalId: applicationPrincipalId
+  }
+}
+
+module applicationParisAccess 'modules/resource-group-role-assignment.bicep' = if (!empty(applicationPrincipalId)) {
+  scope: parisRg
+  name: 'application-paris-contributor'
+  params: {
+    principalId: applicationPrincipalId
+  }
+}
+
+module applicationBerlinMcpAccess 'modules/resource-group-role-assignment.bicep' = if (!empty(applicationPrincipalId) && deployBerlinMcp) {
+  scope: berlinMcpRg
+  name: 'application-berlin-mcp-contributor'
+  params: {
+    principalId: applicationPrincipalId
   }
 }
 
@@ -242,7 +317,7 @@ module lisbonApi 'modules/lisbon-api.bicep' = {
   name: 'lisbon-api-deployment'
   params: {
     location: location
-    containerSubnetId: hub.outputs.containerSubnetId
+    containerSubnetId: hub.outputs.lisbonContainerSubnetId
     logAnalyticsWorkspaceId: hub.outputs.logAnalyticsWorkspaceId
     logAnalyticsCustomerId: hub.outputs.logAnalyticsCustomerId
     containerImage: lisbonContainerImage
@@ -271,9 +346,10 @@ module berlinApi 'modules/berlin-api.bicep' = {
   name: 'berlin-api-deployment'
   params: {
     location: location
-    containerSubnetId: hub.outputs.containerSubnetId
+    containerSubnetId: hub.outputs.berlinContainerSubnetId
     containerImage: berlinContainerImage
     containerRegistry: createContainerRegistry ? acr!.outputs.loginServer : containerRegistry
+    chaosControlUrl: chaosControl.outputs.containerAppUrl
     tags: tags
   }
 }
@@ -298,7 +374,7 @@ module chaosControl 'modules/chaos-control.bicep' = {
   params: {
     location: location
     environment: environment
-    containerSubnetId: hub.outputs.containerSubnetId
+    containerSubnetId: hub.outputs.chaosContainerSubnetId
     containerImage: chaosControlContainerImage
     containerRegistry: createContainerRegistry ? acr!.outputs.loginServer : containerRegistry
     tags: tags
@@ -371,11 +447,11 @@ module berlinMcpServer 'modules/berlin-mcp-server.bicep' = if (deployBerlinMcp) 
   name: 'berlin-mcp-server-deployment'
   params: {
     location: location
-    environment: environment
-    containerSubnetId: hub.outputs.containerSubnetId
+    containerSubnetId: hub.outputs.berlinMcpContainerSubnetId
     berlinApiUrl: berlinApi.outputs.containerAppUrl
     containerImage: '' // Will be set by CI/CD pipeline
     containerRegistry: createContainerRegistry ? acr!.outputs.loginServer : containerRegistry
+    mcpAuthToken: mcpAuthToken
     tags: tags
   }
 }
@@ -446,7 +522,7 @@ module madridDcrAssociation 'modules/vm-dcr-association.bicep' = if (deployMadri
   scope: madridRg
   name: 'madrid-dcr-association-deployment'
   params: {
-    vmName: 'vm-madrid-api'
+    vmName: madridApi.outputs.vmName
     associationName: 'assoc-madrid-windows-events'
     associationDescription: 'Collect Madrid Windows Event Viewer logs to Log Analytics'
     dataCollectionRuleId: vmLogCollection.outputs.madridWindowsEventsDcrId
@@ -458,33 +534,11 @@ module parisDcrAssociation 'modules/vm-dcr-association.bicep' = if (deployParisV
   scope: parisRg
   name: 'paris-dcr-association-deployment'
   params: {
-    vmName: 'vm-paris-api'
+    vmName: parisApi.outputs.vmName
     associationName: 'assoc-paris-syslog'
     associationDescription: 'Collect Paris Linux syslog logs to Log Analytics'
     dataCollectionRuleId: vmLogCollection.outputs.parisSyslogDcrId
     dataCollectionEndpointId: vmLogCollection.outputs.dataCollectionEndpointId
-  }
-}
-
-// ========================================
-// Storage Role Assignments for VMs
-// ========================================
-
-module madridStorageAccess 'modules/storage-role-assignment.bicep' = if (deployMadridVm) {
-  scope: hubRg
-  name: 'madrid-storage-access'
-  params: {
-    principalId: madridApi.outputs.vmPrincipalId
-    storageAccountName: deploymentStorage.outputs.storageAccountName
-  }
-}
-
-module parisStorageAccess 'modules/storage-role-assignment.bicep' = if (deployParisVm) {
-  scope: hubRg
-  name: 'paris-storage-access'
-  params: {
-    principalId: parisApi.outputs.vmPrincipalId
-    storageAccountName: deploymentStorage.outputs.storageAccountName
   }
 }
 
@@ -497,6 +551,7 @@ module frontend 'modules/frontend.bicep' = {
   name: 'frontend-deployment'
   params: {
     location: location
+    appServiceSubnetId: hub.outputs.appServiceSubnetId
     logAnalyticsWorkspaceId: hub.outputs.logAnalyticsWorkspaceId
     lisbonApiUrl: lisbonApi.outputs.containerAppUrl
     madridApiUrl: madridApi.outputs.apiUrl
@@ -522,6 +577,8 @@ output chaosControlResourceGroup string = chaosControlRg.name
 output berlinMcpResourceGroup string = deployBerlinMcp ? berlinMcpRg!.name : ''
 
 output vnetName string = hub.outputs.vnetName
+output appServiceSubnetPrefix string = appServiceSubnetPrefix
+output logAnalyticsWorkspaceId string = hub.outputs.logAnalyticsWorkspaceId
 output logAnalyticsWorkspaceName string = hub.outputs.logAnalyticsWorkspaceName
 
 output containerRegistryName string = createContainerRegistry ? acr!.outputs.registryName : ''
@@ -531,9 +588,8 @@ output containerRegistryUrl string = createContainerRegistry ? acr!.outputs.regi
 output deploymentStorageAccountName string = deploymentStorage.outputs.storageAccountName
 output deploymentStorageBlobEndpoint string = deploymentStorage.outputs.blobEndpoint
 
-output githubRunnerNetworkSettingsId string = !empty(githubOrgDatabaseId) ? githubRunners!.outputs.networkSettingsResourceId : ''
-
 output frontendUrl string = frontend.outputs.appServiceUrl
+output frontendAppServiceName string = frontend.outputs.appServiceName
 output lisbonApiUrl string = lisbonApi.outputs.containerAppUrl
 output madridApiUrl string = madridApi.outputs.apiUrl
 output parisApiUrl string = parisApi.outputs.apiUrl
