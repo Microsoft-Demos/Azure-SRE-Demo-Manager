@@ -4,7 +4,8 @@
 
 param(
     [string]$ApiDirectory = "C:\Apps\madrid-parking-api",
-    [string]$CertDays = "365"
+    [string]$CertDays = "365",
+    [string]$CertificateCommonName = "madrid-api.local"
 )
 
 Write-Host "========================================" -ForegroundColor Green
@@ -81,7 +82,7 @@ try {
     }
     
     & $opensslExe req -new -x509 -key madrid.key -out madrid.crt -days $CertDays `
-        -subj "/C=ES/ST=Madrid/L=Madrid/O=Parking/OU=API/CN=10.0.1.5"
+        -subj "/C=ES/ST=Madrid/L=Madrid/O=Parking/OU=API/CN=$CertificateCommonName"
     
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to generate certificate"

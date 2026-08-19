@@ -38,7 +38,7 @@ Use the learnings from this issue to create a GitHub issue on the connected repo
 ## Chat 3 — App Dependencies
 
 ```prompt
-Generate a diagram for the application dependencies of the frontend app-parking-frontend-x6z6kgmn65dc4 from the backend APIs. Analyze Application Insights dependency telemetry of the last 24h to infer the backend APIs if required. The output should be a pretty visual Mermaid diagram with aggregatted total number of calls and average response time.
+Generate a diagram for the application dependencies of the frontend <frontend-app-service-name> from the backend APIs. Analyze Application Insights dependency telemetry of the last 24h to infer the backend APIs if required. The output should be a pretty visual Mermaid diagram with aggregated total number of calls and average response time.
 
 Generate a diagram for the application dependencies of the frontend app-parking-frontend from the backend APIs. Analyze Application Insights dependency telemetry of the last 24h to infer the backend APIs if required. The output should be a pretty visual Mermaid diagram with aggregated total number of calls and average response time.
 

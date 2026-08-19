@@ -10,10 +10,13 @@ on:
 
 jobs:
   whatif:
+    if: vars.AZURE_DEPLOYMENTS_ENABLED == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: write
+    env:
+      ADMIN_PASSWORD: WhatIfOnly-${{ github.run_id }}-Aa1!
     
     steps:
       - name: Checkout code
@@ -34,9 +37,8 @@ jobs:
       - name: Determine parameters file
         id: params
         run: |
-          # Check if environment-specific parameters exist
-          if [ -f "infrastructure/main.parameters.json" ]; then
-            PARAMS_FILE="infrastructure/main.parameters.json"
+          if [ -f "infrastructure/main.parameters.example.json" ]; then
+            PARAMS_FILE="infrastructure/main.parameters.example.json"
           else
             echo "Error: Default parameters file not found"
             exit 1
@@ -62,6 +64,7 @@ jobs:
             --location "$LOCATION" \
             --template-file infrastructure/main.bicep \
             --parameters "${{ steps.params.outputs.parameters-file }}" \
+            --parameters adminPassword="$ADMIN_PASSWORD" \
             --subscription "${{ steps.extract-sub.outputs.subscription-id }}" \
             --no-pretty-print \
             > whatif-output.txt 2>&1 || {

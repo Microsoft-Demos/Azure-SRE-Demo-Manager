@@ -29,7 +29,7 @@ Since the VM has no public IP, you need to connect through the Azure Bastion or 
 # Go to Azure Portal → VM → Connect → Bastion
 
 # Option 2: Via jumpbox/bastion host
-ssh -J jumpbox-user@jumpbox-ip azureadmin@10.0.1.4
+ssh -J jumpbox-user@jumpbox-ip azureadmin@<paris-vm-private-ip>
 ```
 
 ### Step 2: Run the Setup Script

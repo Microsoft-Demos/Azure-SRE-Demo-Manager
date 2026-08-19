@@ -141,17 +141,14 @@ az monitor app-insights metrics show \
 ```
 
 ### Cleanup
-```bash
-# Delete all resources (by resource groups)
-az group delete --name rg-parking-hub-dev --yes --no-wait
-az group delete --name rg-parking-frontend-dev --yes --no-wait
-az group delete --name rg-parking-lisbon-dev --yes --no-wait
-az group delete --name rg-parking-madrid-dev --yes --no-wait
-az group delete --name rg-parking-paris-dev --yes --no-wait
-
-# Or delete the entire deployment
-az deployment sub delete --name <deployment-name>
+```powershell
+# Read-only inventory and safety assessment
+pwsh ../scripts/retire-azure-subscription.ps1 `
+  -SubscriptionId '<subscription-id>' `
+  -Action Assess
 ```
+
+Do not delete the hub first or use `az deployment sub delete` as resource cleanup; deleting a deployment record does not delete its resources. Follow the [Azure Subscription Retirement runbook](../docs/SUBSCRIPTION_RETIREMENT.md) for dependency-ordered cleanup and cancellation gates.
 
 ## Post-Deployment Checklist
 

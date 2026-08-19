@@ -21,6 +21,7 @@ env:
 
 jobs:
   deploy:
+    if: vars.AZURE_DEPLOYMENTS_ENABLED == 'true'
     runs-on: parking-hub-runner-windows
     
     steps:

@@ -1,5 +1,7 @@
 # Deployment Changes Summary
 
+> `main.parameters.json` is now a local, ignored file. Start from `main.parameters.example.json` and never commit passwords or generated deployment outputs. Summary
+
 ## Recent Changes
 
 ### February 13, 2026 - Fixed VNet Subnet Management and Deployment Warnings
@@ -197,7 +199,7 @@ The ACR name is automatically generated as:
 acrparking{environment}{uniqueString}
 ```
 
-For example: `acrparkingdevxyz123abc`
+For example: `<acr-name>`
 
 This ensures global uniqueness as ACR names must be unique across all of Azure.
 

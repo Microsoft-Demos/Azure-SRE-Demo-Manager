@@ -18,6 +18,14 @@ __pycache__/
 .env.test.local
 .env.production.local
 
+# Azure deployment state and secrets
+infrastructure/main.parameters.json
+infrastructure/main.parameters.local.json
+infrastructure/main.parameters.*.local.json
+deployment-output*.json
+whatif-output.txt
+retirement-assessment*.json
+
 # Build outputs
 build/
 dist/

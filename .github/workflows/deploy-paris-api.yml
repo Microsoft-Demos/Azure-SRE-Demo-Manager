@@ -21,6 +21,7 @@ env:
 
 jobs:
   deploy:
+    if: vars.AZURE_DEPLOYMENTS_ENABLED == 'true'
     runs-on: parking-hub-runner-linux
     
     steps:
@@ -143,7 +144,7 @@ jobs:
             openssl genrsa -out "$APP_DIR/paris.key" 2048
             openssl req -new -x509 -key "$APP_DIR/paris.key" -out "$APP_DIR/paris.crt" \
               -days 365 \
-              -subj "/C=FR/ST=Paris/L=Paris/O=Parking/OU=API/CN=10.0.1.4"
+              -subj "/C=FR/ST=Paris/L=Paris/O=Parking/OU=API/CN=paris-api.local"
             chmod 600 "$APP_DIR/paris.key"
             chmod 644 "$APP_DIR/paris.crt"
             echo "✅ Certificates generated"

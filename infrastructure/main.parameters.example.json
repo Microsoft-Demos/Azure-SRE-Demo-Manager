@@ -11,13 +11,19 @@
     "adminUsername": {
       "value": "azureadmin"
     },
-    "adminPassword": {
-      "value": "CHANGE_ME_P@ssw0rd123!"
-    },
     "lisbonContainerImage": {
       "value": "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest"
     },
     "createPublicIps": {
+      "value": false
+    },
+    "deployMadridVm": {
+      "value": true
+    },
+    "deployParisVm": {
+      "value": false
+    },
+    "deployBerlinMcp": {
       "value": false
     },
     "createContainerRegistry": {
@@ -26,20 +32,14 @@
     "containerRegistrySku": {
       "value": "Basic"
     },
-    "deployMadridVm": {
-      "value": true
-    },
-    "deployParisVm": {
-      "value": false
-    },
     "githubActionsPrincipalId": {
-      "value": "49734d7a-0a91-4996-9a7f-df7939bdc8b3"
+      "value": ""
+    },
+    "githubOrgDatabaseId": {
+      "value": ""
     },
     "runnerSubnetPrefix": {
       "value": "10.0.4.0/24"
-    },
-    "githubOrgDatabaseId": {
-      "value": "253047645"
     }
   }
 }

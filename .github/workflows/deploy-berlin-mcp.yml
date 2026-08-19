@@ -34,6 +34,7 @@ env:
 
 jobs:
   build-and-deploy:
+    if: vars.AZURE_DEPLOYMENTS_ENABLED == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read

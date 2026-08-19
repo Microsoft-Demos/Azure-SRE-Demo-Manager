@@ -2,6 +2,8 @@
 
 This document explains the GitHub Actions workflows configured for the Azure SRE Demo Manager project.
 
+> **Fail-closed deployment gate:** every Azure workflow is skipped unless the repository variable `AZURE_DEPLOYMENTS_ENABLED` is exactly `true`. Keep it unset or `false` while retiring an environment.
+
 ## Overview
 
 The project uses multiple deployment workflows:
@@ -212,6 +214,7 @@ Copy the entire JSON output as the `AZURE_CREDENTIALS` secret value.
 
 | Secret | Used by |
 |--------|---------|
+| `AZURE_VM_ADMIN_PASSWORD` | Infrastructure deployment |
 | `MCP_AUTH_TOKEN` | Berlin MCP Server workflow |
 
 ### GitHub Variables
@@ -220,6 +223,7 @@ Configure variables in **Settings → Secrets and variables → Actions → Vari
 
 | Variable | Example value | Used by |
 |----------|---------------|---------|
+| `AZURE_DEPLOYMENTS_ENABLED` | `true` | Explicitly enables all Azure workflows |
 | `AZURE_CONTAINER_REGISTRY` | `<acr-name>` | Lisbon, Berlin, Chaos Control, Berlin MCP |
 | `LISBON_RESOURCE_GROUP` | `rg-parking-lisbon-<env>` | Lisbon API |
 | `BERLIN_RESOURCE_GROUP` | `rg-parking-berlin-<env>` | Berlin API |
@@ -244,8 +248,8 @@ az deployment sub show --name main-deployment --query properties.outputs
 
 The infrastructure deployment workflows use parameter files in `infrastructure/`:
 
-- `main.parameters.json` — Default parameters used by workflows
-- `main.parameters.example01.json` / `main.parameters.example02.json` — Example configurations
+- `main.parameters.example.json` — Non-secret parameters used by workflows
+- `main.parameters.json` / `main.parameters.local.json` — Ignored local overrides
 
 **Key Parameters:**
 
@@ -254,12 +258,14 @@ The infrastructure deployment workflows use parameter files in `infrastructure/`
 | `location` | Azure region (e.g., `westeurope`) |
 | `environment` | Environment tag (`dev`, `test`, `prod`) |
 | `adminUsername` | VM administrator username |
-| `adminPassword` | VM administrator password |
+| `adminPassword` | Supplied through `AZURE_VM_ADMIN_PASSWORD`, never a tracked parameter file |
 | `createPublicIps` | Create public IPs for VMs (`true`/`false`) |
 | `createContainerRegistry` | Create Azure Container Registry (`true`/`false`) |
 | `deployBerlinMcp` | Deploy Berlin MCP Server Container App (`true`/`false`) |
 
 > **Security note**: Never commit `adminPassword` or other secrets to source control. Use GitHub Secrets or Azure Key Vault references for sensitive values.
+
+For permanent cleanup, see [Azure Subscription Retirement](../../docs/SUBSCRIPTION_RETIREMENT.md).
 
 ---
 

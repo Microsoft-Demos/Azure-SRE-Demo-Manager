@@ -65,7 +65,7 @@ Configure your Azure SRE Agent MCP connector with the following settings:
 |-------|-------|
 | **Name** | `berlin-monitoring` |
 | **Connection Type** | `Streamable-HTTP` |
-| **URL** | `https://ca-berlin-mcp.ashyriver-65b8d9ff.swedencentral.azurecontainerapps.io/mcp` |
+| **URL** | `https://berlin-mcp.example.invalid/mcp` |
 | **Authentication Method** | `Bearer Token` |
 | **Token** | `your-token-from-github-secret` |
 
@@ -93,7 +93,7 @@ curl -X POST \
       }
     }
   }' \
-  https://ca-berlin-mcp.ashyriver-65b8d9ff.swedencentral.azurecontainerapps.io/mcp
+  https://berlin-mcp.example.invalid/mcp
 
 # Test tools/list request
 curl -X POST \
@@ -105,7 +105,7 @@ curl -X POST \
     "method": "tools/list",
     "params": {}
   }' \
-  https://ca-berlin-mcp.ashyriver-65b8d9ff.swedencentral.azurecontainerapps.io/mcp
+  https://berlin-mcp.example.invalid/mcp
 ```
 
 ## Available Tools
@@ -165,7 +165,7 @@ Configure your MCP client with Bearer Token authentication:
 {
   "mcpServers": {
     "berlin-monitoring": {
-      "url": "https://ca-berlin-mcp.ashyriver-65b8d9ff.swedencentral.azurecontainerapps.io/mcp",
+      "url": "https://berlin-mcp.example.invalid/mcp",
       "transport": "streamable-http",
       "headers": {
         "Authorization": "Bearer your-secret-token-here"
@@ -194,7 +194,7 @@ curl -X POST \
       }
     }
   }' \
-  https://ca-berlin-mcp.ashyriver-65b8d9ff.swedencentral.azurecontainerapps.io/mcp
+  https://berlin-mcp.example.invalid/mcp
 # Expected: 401 Unauthorized
 ```
 
@@ -216,13 +216,13 @@ curl -X POST \
       }
     }
   }' \
-  https://ca-berlin-mcp.ashyriver-65b8d9ff.swedencentral.azurecontainerapps.io/mcp
+  https://berlin-mcp.example.invalid/mcp
 # Expected: 200 OK with JSON-RPC response
 ```
 
 **Health endpoint (always public):**
 ```bash
-curl https://ca-berlin-mcp.ashyriver-65b8d9ff.swedencentral.azurecontainerapps.io/health
+curl https://berlin-mcp.example.invalid/health
 # Expected: 200 OK (no auth required)
 ```
 
@@ -292,12 +292,12 @@ Since the server already has multiple layers of security (Bearer token authentic
 
 ### Test Health Endpoint
 ```bash
-curl https://ca-berlin-mcp.ashyriver-65b8d9ff.swedencentral.azurecontainerapps.io/health
+curl https://berlin-mcp.example.invalid/health
 ```
 
 ### Test Server Info
 ```bash
-curl https://ca-berlin-mcp.ashyriver-65b8d9ff.swedencentral.azurecontainerapps.io/
+curl https://berlin-mcp.example.invalid/
 ```
 
 ### Connect MCP Client
@@ -306,7 +306,7 @@ Configure your MCP client to use the Streamable-HTTP transport:
 {
   "mcpServers": {
     "berlin-monitoring": {
-      "url": "https://ca-berlin-mcp.ashyriver-65b8d9ff.swedencentral.azurecontainerapps.io/mcp",
+      "url": "https://berlin-mcp.example.invalid/mcp",
       "transport": "streamable-http"
     }
   }
@@ -366,7 +366,7 @@ After deployment, check that authentication is enabled:
 
 ```powershell
 # Check health endpoint
-Invoke-RestMethod "https://ca-berlin-mcp.ashyriver-65b8d9ff.swedencentral.azurecontainerapps.io/health"
+Invoke-RestMethod "https://berlin-mcp.example.invalid/health"
 
 # Should return:
 # {
@@ -417,7 +417,7 @@ az deployment group create \
   --parameters \
     location=swedencentral \
     environment=dev \
-    berlinApiUrl=https://ca-parking-berlin.braveocean-195c6009.swedencentral.azurecontainerapps.io \
+    berlinApiUrl=https://berlin-api.example.invalid \
     containerImage=<your-image>
 ```
 

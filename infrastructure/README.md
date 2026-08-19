@@ -116,7 +116,7 @@ cd infrastructure
 az deployment sub validate \
   --location westeurope \
   --template-file main.bicep \
-  --parameters main.parameters.json \
+  --parameters main.parameters.example.json \
   --parameters adminPassword='<your-secure-password>'
 ```
 
@@ -138,12 +138,12 @@ az deployment sub create \
 
 1. Create a copy of the parameters file:
    ```bash
-   cp main.parameters.json main.parameters.local.json
+   cp main.parameters.example.json main.parameters.local.json
    ```
 
 2. Edit `main.parameters.local.json` and update the values:
-   - Replace `{subscription-id}`, `{rg-name}`, `{vault-name}` if using Key Vault
-   - Or provide the password directly (not recommended for production)
+   - Add environment-specific non-secret values.
+   - Keep the VM password out of the file and provide it separately.
 
 3. Deploy:
    ```bash
@@ -304,22 +304,15 @@ az deployment sub create \
 
 ## Cleaning Up
 
-To delete all resources:
+Do not bulk-delete resource groups from an unverified subscription. First run the read-only retirement assessment:
 
-```bash
-# Replace <env> with your environment (e.g., dev, test, prod)
-az group delete --name rg-parking-hub-<env>            --yes --no-wait
-az group delete --name rg-parking-frontend-<env>       --yes --no-wait
-az group delete --name rg-parking-lisbon-<env>         --yes --no-wait
-az group delete --name rg-parking-berlin-<env>         --yes --no-wait
-az group delete --name rg-parking-madrid-<env>         --yes --no-wait
-az group delete --name rg-parking-paris-<env>          --yes --no-wait
-az group delete --name rg-parking-chaos-<env>          --yes --no-wait
-# Optional Berlin MCP:
-az group delete --name rg-parking-berlin-mcp-<env>     --yes --no-wait
+```powershell
+pwsh ../scripts/retire-azure-subscription.ps1 `
+  -SubscriptionId '<subscription-id>' `
+  -Action Assess
 ```
 
-> ⚠️ **Cost reminder**: Azure resources continue to accrue charges until deleted. Run the cleanup commands above when the demo environment is no longer needed.
+The script deletes only known repository groups when explicitly invoked and refuses subscription cancellation until the subscription is empty. Follow the complete [Azure Subscription Retirement runbook](../docs/SUBSCRIPTION_RETIREMENT.md), including backup, GitHub networking, runner, and Entra cleanup.
 
 ## Troubleshooting
 

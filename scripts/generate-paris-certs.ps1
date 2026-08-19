@@ -4,7 +4,8 @@
 
 param(
     [string]$ApiDirectory = "/home/azureuser/backend/paris-parking-api",
-    [int]$CertDays = 365
+    [int]$CertDays = 365,
+    [string]$CertificateCommonName = "paris-api.local"
 )
 
 Write-Host "========================================" -ForegroundColor Green
@@ -63,7 +64,7 @@ try {
     }
 
     openssl req -new -x509 -key paris.key -out paris.crt -days $CertDays `
-        -subj "/C=FR/ST=Paris/L=Paris/O=Parking/OU=API/CN=10.0.1.4"
+        -subj "/C=FR/ST=Paris/L=Paris/O=Parking/OU=API/CN=$CertificateCommonName"
 
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to generate certificate"

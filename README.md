@@ -181,8 +181,11 @@ docker run -p 3001:3001 \
 
 Bicep templates in `infrastructure/` deploy the full Azure environment.
 
+> Azure GitHub Actions are fail-closed. Set the repository variable `AZURE_DEPLOYMENTS_ENABLED=true` only after configuring a new target subscription and credentials.
+
 ```bash
 cd infrastructure
+cp main.parameters.example.json main.parameters.json
 ./deploy.sh
 ```
 
@@ -235,6 +238,8 @@ REACT_APP_VM_HEALTH_CONTROL_URL=https://<vm-health-control-fqdn>
 ```
 
 CI/CD via GitHub Actions is documented in [.github/workflows/README.md](.github/workflows/README.md).
+
+To decommission an existing environment, follow [Azure Subscription Retirement](docs/SUBSCRIPTION_RETIREMENT.md). The retirement workflow does not run deployments, ARM what-if, or application tests.
 
 ## API Documentation
 
