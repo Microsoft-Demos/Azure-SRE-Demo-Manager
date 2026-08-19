@@ -4,7 +4,7 @@ Use this runbook to retire an Azure deployment without running an application te
 
 ## Safety model
 
-- Azure deployment workflows are disabled unless the repository variable `AZURE_DEPLOYMENTS_ENABLED` is exactly `true`.
+- Infrastructure and application workflows use separate repository-level fail-closed gates.
 - `Assess` is read-only.
 - `RemoveRepositoryResources` deletes only the known `rg-parking-*` resource groups for the selected environment.
 - Unrecognized resource groups are never deleted by the script.
@@ -27,10 +27,11 @@ Use this runbook to retire an Azure deployment without running an application te
 
 ## 1. Freeze deployment automation
 
-Set a **repository-level** `AZURE_DEPLOYMENTS_ENABLED=false`; do not rely on the variable being absent because an organization-level value can be inherited. Disable the Azure workflows in GitHub while retirement is in progress.
+Set repository-level `AZURE_INFRA_DEPLOYMENTS_ENABLED=false` and `AZURE_DEPLOYMENTS_ENABLED=false`; do not rely on either variable being absent because organization-level values can be inherited. Disable the Azure workflows in GitHub while retirement is in progress.
 
 ```powershell
 gh variable set AZURE_DEPLOYMENTS_ENABLED --repo '<owner>/<repository>' --body false
+gh variable set AZURE_INFRA_DEPLOYMENTS_ENABLED --repo '<owner>/<repository>' --body false
 ```
 
 Remove these repository secrets after confirming no remaining cleanup job needs them:

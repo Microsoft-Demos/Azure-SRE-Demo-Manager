@@ -227,3 +227,4 @@ openssl x509 -in madrid.crt -text -noout | grep -A 2 "Subject:"
 - **Total:** ~30-45 minutes for complete setup
 
 ---
+> **Optional legacy HTTPS path:** The portable Azure deployment uses private HTTP VM endpoints over VNet integration and does not disable TLS verification in the frontend proxy.

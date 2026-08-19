@@ -17,8 +17,11 @@ on:
       enabled:
         description: 'Enable alerts after deployment'
         required: true
-        type: boolean
-        default: true
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+        default: 'true'
       evaluationFrequency:
         description: 'Query evaluation frequency (ISO8601 duration)'
         required: true
@@ -39,40 +42,65 @@ env:
   HUB_RESOURCE_GROUP: ${{ vars.HUB_RESOURCE_GROUP }}
   LOG_ANALYTICS_WORKSPACE_RESOURCE_ID: ${{ vars.LOG_ANALYTICS_WORKSPACE_RESOURCE_ID }}
   ACTION_GROUP_RESOURCE_ID: ${{ vars.ACTION_GROUP_RESOURCE_ID }}
+  INPUT_LOCATION: ${{ inputs.location || 'swedencentral' }}
+  INPUT_ENABLED: ${{ inputs.enabled || 'true' }}
+  INPUT_EVALUATION_FREQUENCY: ${{ inputs.evaluationFrequency || 'PT5M' }}
+  INPUT_WINDOW_SIZE: ${{ inputs.windowSize || 'PT5M' }}
+  INPUT_NAME_PREFIX: ${{ inputs.namePrefix || 'lisbon-chaos' }}
 
 jobs:
   deploy:
-    if: vars.AZURE_DEPLOYMENTS_ENABLED == 'true'
+    if: github.ref == 'refs/heads/main' && vars.AZURE_DEPLOYMENTS_ENABLED == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      id-token: write
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Log in to Azure
-        uses: azure/login@v1
+        uses: azure/login@v2
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          client-id: ${{ vars.AZURE_APP_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - name: Validate required variables
         run: |
-          if [ -z "${{ env.HUB_RESOURCE_GROUP }}" ]; then
+          if [ -z "$HUB_RESOURCE_GROUP" ]; then
             echo "❌ Missing GitHub variable: HUB_RESOURCE_GROUP"
             exit 1
           fi
 
-          if [ -z "${{ env.LOG_ANALYTICS_WORKSPACE_RESOURCE_ID }}" ]; then
+          if [ -z "$LOG_ANALYTICS_WORKSPACE_RESOURCE_ID" ]; then
             echo "❌ Missing GitHub variable: LOG_ANALYTICS_WORKSPACE_RESOURCE_ID"
             exit 1
           fi
 
-          if [[ "${{ env.LOG_ANALYTICS_WORKSPACE_RESOURCE_ID }}" != /subscriptions/* ]]; then
+          if [[ "$LOG_ANALYTICS_WORKSPACE_RESOURCE_ID" != /subscriptions/* ]]; then
             echo "❌ LOG_ANALYTICS_WORKSPACE_RESOURCE_ID must be a fully qualified ARM resource ID starting with '/subscriptions/'"
-            echo "   Got: ${{ env.LOG_ANALYTICS_WORKSPACE_RESOURCE_ID }}"
+            echo "   Got: $LOG_ANALYTICS_WORKSPACE_RESOURCE_ID"
             echo "   Expected format: /subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}"
             echo "   Note: Do not use the Log Analytics workspace customer ID (GUID). Use the full ARM resource ID."
+            exit 1
+          fi
+
+          if [[ ! "$INPUT_LOCATION" =~ ^[a-z0-9]+$ ]]; then
+            echo "❌ Invalid Azure location"
+            exit 1
+          fi
+          if [[ ! "$INPUT_EVALUATION_FREQUENCY" =~ ^PT[0-9]+[SMH]$ ]] || [[ ! "$INPUT_WINDOW_SIZE" =~ ^PT[0-9]+[SMH]$ ]]; then
+            echo "❌ Frequencies must be simple ISO8601 durations such as PT5M or PT1H"
+            exit 1
+          fi
+          if [[ ! "$INPUT_NAME_PREFIX" =~ ^[a-z0-9-]{1,40}$ ]]; then
+            echo "❌ Name prefix must contain only lowercase letters, digits, and hyphens"
+            exit 1
+          fi
+          if [[ "$INPUT_ENABLED" != "true" && "$INPUT_ENABLED" != "false" ]]; then
+            echo "❌ Enabled must be true or false"
             exit 1
           fi
 
@@ -81,25 +109,25 @@ jobs:
       - name: Deploy Lisbon chaos alerts
         run: |
           az deployment group create \
-            --resource-group "${{ env.HUB_RESOURCE_GROUP }}" \
+            --resource-group "$HUB_RESOURCE_GROUP" \
             --template-file infrastructure/modules/lisbon-chaos-alerts.bicep \
             --parameters \
-              location="${{ inputs.location || 'swedencentral' }}" \
-              logAnalyticsWorkspaceId="${{ env.LOG_ANALYTICS_WORKSPACE_RESOURCE_ID }}" \
-              actionGroupResourceId="${{ env.ACTION_GROUP_RESOURCE_ID }}" \
-              enabled="${{ inputs.enabled || 'true' }}" \
-              evaluationFrequency="${{ inputs.evaluationFrequency || 'PT5M' }}" \
-              windowSize="${{ inputs.windowSize || 'PT5M' }}" \
-              namePrefix="${{ inputs.namePrefix || 'lisbon-chaos' }}"
+              location="$INPUT_LOCATION" \
+              logAnalyticsWorkspaceId="$LOG_ANALYTICS_WORKSPACE_RESOURCE_ID" \
+              actionGroupResourceId="$ACTION_GROUP_RESOURCE_ID" \
+              enabled="$INPUT_ENABLED" \
+              evaluationFrequency="$INPUT_EVALUATION_FREQUENCY" \
+              windowSize="$INPUT_WINDOW_SIZE" \
+              namePrefix="$INPUT_NAME_PREFIX"
 
       - name: Deployment summary
         run: |
           echo "### Lisbon Chaos Alerts Deployment Successful ✅" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Template**: infrastructure/modules/lisbon-chaos-alerts.bicep" >> $GITHUB_STEP_SUMMARY
-          echo "- **Resource Group**: ${{ env.HUB_RESOURCE_GROUP }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Location**: ${{ inputs.location || 'swedencentral' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Enabled**: ${{ inputs.enabled || 'true' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Evaluation Frequency**: ${{ inputs.evaluationFrequency || 'PT5M' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Window Size**: ${{ inputs.windowSize || 'PT5M' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Name Prefix**: ${{ inputs.namePrefix || 'lisbon-chaos' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Resource Group**: $HUB_RESOURCE_GROUP" >> $GITHUB_STEP_SUMMARY
+          echo "- **Location**: $INPUT_LOCATION" >> $GITHUB_STEP_SUMMARY
+          echo "- **Enabled**: $INPUT_ENABLED" >> $GITHUB_STEP_SUMMARY
+          echo "- **Evaluation Frequency**: $INPUT_EVALUATION_FREQUENCY" >> $GITHUB_STEP_SUMMARY
+          echo "- **Window Size**: $INPUT_WINDOW_SIZE" >> $GITHUB_STEP_SUMMARY
+          echo "- **Name Prefix**: $INPUT_NAME_PREFIX" >> $GITHUB_STEP_SUMMARY

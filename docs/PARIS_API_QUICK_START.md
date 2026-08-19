@@ -292,3 +292,4 @@ sudo tail -f /var/log/syslog | grep ParisParkingAPI
 # Test API
 curl --insecure https://localhost:3003/health
 ```
+> **Historical/manual path:** The standard GitHub workflow deploys Paris through Azure VM Run Command and uses private HTTP inside the VNet.

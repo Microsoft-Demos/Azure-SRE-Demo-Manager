@@ -349,3 +349,4 @@ openssl req -new -x509 -key madrid.key -out madrid.crt -days 365 \
 6. Monitor application logs for issues
 7. Verify parking data displays correctly in React frontend
 
+> **Optional legacy HTTPS path:** The portable Azure deployment uses private HTTP VM endpoints over VNet integration. Follow this guide only if you intentionally add trusted VM certificates and update the API URLs.

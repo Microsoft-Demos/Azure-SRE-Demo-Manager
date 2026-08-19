@@ -4,8 +4,8 @@
   "metadata": {
     "_generator": {
       "name": "bicep",
-      "version": "0.40.2.10011",
-      "templateHash": "2431130882982345683"
+      "version": "0.39.26.7824",
+      "templateHash": "6360750842846449200"
     }
   },
   "parameters": {
@@ -100,6 +100,12 @@
       "properties": {
         "environmentId": "[resourceId('Microsoft.App/managedEnvironments', 'cae-parking-lisbon')]",
         "configuration": {
+          "secrets": [
+            {
+              "name": "log-analytics-shared-key",
+              "value": "[listKeys(parameters('logAnalyticsWorkspaceId'), '2022-10-01').primarySharedKey]"
+            }
+          ],
           "ingress": {
             "external": true,
             "targetPort": 3001,
@@ -136,7 +142,7 @@
                 },
                 {
                   "name": "SHARED_KEY",
-                  "value": "[listKeys(parameters('logAnalyticsWorkspaceId'), '2022-10-01').primarySharedKey]"
+                  "secretRef": "log-analytics-shared-key"
                 },
                 {
                   "name": "LOG_TYPE",

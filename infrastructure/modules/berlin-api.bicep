@@ -13,6 +13,9 @@ param containerImage string = 'mcr.microsoft.com/azuredocs/containerapps-hellowo
 @description('Container registry server (leave empty for public registries)')
 param containerRegistry string = ''
 
+@description('Chaos Control service URL for fault configuration')
+param chaosControlUrl string = ''
+
 @description('Tags to apply to resources')
 param tags object = {}
 
@@ -87,6 +90,10 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
             {
               name: 'NODE_ENV'
               value: 'production'
+            }
+            {
+              name: 'CHAOS_CONTROL_URL'
+              value: chaosControlUrl
             }
           ]
           probes: [

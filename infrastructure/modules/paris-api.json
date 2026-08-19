@@ -4,8 +4,8 @@
   "metadata": {
     "_generator": {
       "name": "bicep",
-      "version": "0.40.2.10011",
-      "templateHash": "4922745226047476224"
+      "version": "0.39.26.7824",
+      "templateHash": "7082674922539458528"
     }
   },
   "parameters": {
@@ -57,7 +57,7 @@
   },
   "resources": [
     {
-      "condition": "[parameters('createPublicIp')]",
+      "condition": "[and(parameters('deployVM'), parameters('createPublicIp'))]",
       "type": "Microsoft.Network/publicIPAddresses",
       "apiVersion": "2023-05-01",
       "name": "pip-paris-vm",
@@ -74,6 +74,7 @@
       }
     },
     {
+      "condition": "[parameters('deployVM')]",
       "type": "Microsoft.Network/networkInterfaces",
       "apiVersion": "2023-05-01",
       "name": "nic-paris-vm",
@@ -185,7 +186,7 @@
         "typeHandlerVersion": "2.1",
         "autoUpgradeMinorVersion": true,
         "settings": {
-          "script": "[base64('#!/bin/bash\nset -e\n\n# Update package lists\napt-get update\n\n# Install required packages\napt-get install -y ca-certificates curl gnupg rsyslog\n\n# Setup NodeSource repository for Node.js 18.x\nmkdir -p /etc/apt/keyrings\ncurl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor --batch --yes -o /etc/apt/keyrings/nodesource.gpg 2>/dev/null || true\necho \"deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_18.x nodistro main\" | tee /etc/apt/sources.list.d/nodesource.list\n\n# Install Node.js\napt-get update\napt-get install -y nodejs\n\n# Verify installation\nnode --version\nnpm --version\n')]"
+          "script": "[base64('#!/bin/bash\r\nset -e\r\n\r\n# Update package lists\r\napt-get update\r\n\r\n# Install required packages\r\napt-get install -y ca-certificates curl gnupg rsyslog\r\n\r\n# Setup NodeSource repository for Node.js 18.x\r\nmkdir -p /etc/apt/keyrings\r\ncurl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor --batch --yes -o /etc/apt/keyrings/nodesource.gpg 2>/dev/null || true\r\necho \"deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_18.x nodistro main\" | tee /etc/apt/sources.list.d/nodesource.list\r\n\r\n# Install Node.js\r\napt-get update\r\napt-get install -y nodejs\r\n\r\n# Verify installation\r\nnode --version\r\nnpm --version\r\n')]"
         }
       },
       "dependsOn": [
@@ -209,7 +210,7 @@
     },
     "privateIpAddress": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Network/networkInterfaces', 'nic-paris-vm'), '2023-05-01').ipConfigurations[0].properties.privateIPAddress]"
+      "value": "[if(parameters('deployVM'), reference(resourceId('Microsoft.Network/networkInterfaces', 'nic-paris-vm'), '2023-05-01').ipConfigurations[0].properties.privateIPAddress, '')]"
     },
     "publicIpAddress": {
       "type": "string",
@@ -221,7 +222,7 @@
     },
     "apiUrl": {
       "type": "string",
-      "value": "[if(and(parameters('deployVM'), parameters('createPublicIp')), format('http://{0}:3003', reference(resourceId('Microsoft.Network/publicIPAddresses', 'pip-paris-vm'), '2023-05-01').dnsSettings.fqdn), format('http://{0}:3003', reference(resourceId('Microsoft.Network/networkInterfaces', 'nic-paris-vm'), '2023-05-01').ipConfigurations[0].properties.privateIPAddress))]"
+      "value": "[if(not(parameters('deployVM')), '', if(parameters('createPublicIp'), format('http://{0}:3003', reference(resourceId('Microsoft.Network/publicIPAddresses', 'pip-paris-vm'), '2023-05-01').dnsSettings.fqdn), format('http://{0}:3003', reference(resourceId('Microsoft.Network/networkInterfaces', 'nic-paris-vm'), '2023-05-01').ipConfigurations[0].properties.privateIPAddress)))]"
     }
   }
 }

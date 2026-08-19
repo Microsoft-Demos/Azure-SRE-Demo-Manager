@@ -21,17 +21,22 @@ env:
 
 jobs:
   deploy:
-    if: vars.AZURE_DEPLOYMENTS_ENABLED == 'true'
-    runs-on: parking-hub-runner-linux
+    if: github.ref == 'refs/heads/main' && vars.AZURE_DEPLOYMENTS_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Log in to Azure
-        uses: azure/login@v1
+        uses: azure/login@v2
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          client-id: ${{ vars.AZURE_APP_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - name: Create deployment package
         shell: bash
@@ -90,6 +95,8 @@ jobs:
       - name: Deploy to Paris VM via Run Command
         shell: bash
         run: |
+          CHAOS_CONTROL_URL_B64=$(printf '%s' "$CHAOS_CONTROL_URL" | base64 -w0)
+
           # Create bash deployment script
           cat > /tmp/deploy-paris-${{ github.run_id }}.sh << 'EOFSCRIPT'
           #!/bin/bash
@@ -98,6 +105,7 @@ jobs:
           SERVICE_NAME="${{ env.SERVICE_NAME }}"
           APP_DIR="${{ env.APP_DIR }}"
           BLOB_URL="${{ env.BLOB_URL }}"
+          CHAOS_CONTROL_URL=$(printf '%s' '__CHAOS_CONTROL_URL_B64__' | base64 --decode)
           
           echo "Stopping service if exists..."
           sudo systemctl stop $SERVICE_NAME || true
@@ -129,7 +137,12 @@ jobs:
           echo "Copying application files..."
           sudo cp -r $TEMP_EXTRACT/paris-parking-api/* $APP_DIR/
           sudo cp -r $TEMP_EXTRACT/shared /opt/shared
-          sudo chown -R $USER:$USER $APP_DIR /opt/shared
+          APP_USER=$(getent passwd 1000 | cut -d: -f1)
+          if [ -z "$APP_USER" ]; then
+            echo "ERROR: Could not resolve the VM administrator account"
+            exit 1
+          fi
+          sudo chown -R "$APP_USER:$APP_USER" $APP_DIR /opt/shared
           
           # Clean up
           rm -rf "$TEMP_ZIP" "$TEMP_EXTRACT"
@@ -137,20 +150,6 @@ jobs:
           echo "Installing dependencies..."
           cd $APP_DIR
           npm ci --only=production
-          
-          echo "Checking for HTTPS certificates..."
-          if [ ! -f "$APP_DIR/paris.crt" ] || [ ! -f "$APP_DIR/paris.key" ]; then
-            echo "Generating self-signed certificates..."
-            openssl genrsa -out "$APP_DIR/paris.key" 2048
-            openssl req -new -x509 -key "$APP_DIR/paris.key" -out "$APP_DIR/paris.crt" \
-              -days 365 \
-              -subj "/C=FR/ST=Paris/L=Paris/O=Parking/OU=API/CN=paris-api.local"
-            chmod 600 "$APP_DIR/paris.key"
-            chmod 644 "$APP_DIR/paris.crt"
-            echo "✅ Certificates generated"
-          else
-            echo "✅ Certificates already exist"
-          fi
           
           echo "Creating .env file..."
           cat > "$APP_DIR/.env" << EOF
@@ -161,8 +160,6 @@ jobs:
           SYSLOG_FACILITY=local0
           SYSLOG_TAG=ParisParkingAPI
           NODE_ENV=production
-          CERT_PATH=$APP_DIR/paris.crt
-          KEY_PATH=$APP_DIR/paris.key
           CHAOS_CONTROL_URL=$CHAOS_CONTROL_URL
           EOF
           
@@ -174,7 +171,7 @@ jobs:
           
           [Service]
           Type=simple
-          User=$USER
+          User=$APP_USER
           WorkingDirectory=$APP_DIR
           ExecStart=/usr/bin/node $APP_DIR/server.js
           Restart=always
@@ -199,21 +196,32 @@ jobs:
           
           if sudo systemctl is-active --quiet $SERVICE_NAME; then
             echo "✅ Service is running"
+            echo "DEPLOYMENT_SUCCESS"
           else
             echo "❌ Service failed to start"
             sudo journalctl -u $SERVICE_NAME --no-pager -n 50
             exit 1
           fi
           EOFSCRIPT
+
+          sed -i "s|__CHAOS_CONTROL_URL_B64__|$CHAOS_CONTROL_URL_B64|" /tmp/deploy-paris-${{ github.run_id }}.sh
           
           chmod +x /tmp/deploy-paris-${{ github.run_id }}.sh
           
           echo "Deploying to VM ${{ env.VM_NAME }}..."
-          az vm run-command invoke \
+          RUN_COMMAND_RESULT=$(az vm run-command invoke \
             --name ${{ env.VM_NAME }} \
             --resource-group ${{ env.RESOURCE_GROUP }} \
             --command-id RunShellScript \
-            --scripts @/tmp/deploy-paris-${{ github.run_id }}.sh
+            --scripts @/tmp/deploy-paris-${{ github.run_id }}.sh \
+            --query "value[0].message" \
+            --output tsv)
+
+          echo "$RUN_COMMAND_RESULT"
+          if ! grep -q "DEPLOYMENT_SUCCESS" <<< "$RUN_COMMAND_RESULT"; then
+            echo "Remote Paris deployment did not report success"
+            exit 1
+          fi
           
           rm -f /tmp/deploy-paris-${{ github.run_id }}.sh
 

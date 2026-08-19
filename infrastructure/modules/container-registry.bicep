@@ -14,7 +14,7 @@ param environment string
 param sku string = 'Basic'
 
 @description('Enable admin user for the registry')
-param adminUserEnabled bool = true
+param adminUserEnabled bool = false
 
 @description('Tags to apply to resources')
 param tags object = {}

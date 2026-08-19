@@ -2,9 +2,6 @@ const express = require('express');
 const path = require('path');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 
-// Allow self-signed certificates (development only)
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-
 const app = express();
 const PORT = process.env.PORT || 8080;
 
@@ -25,7 +22,7 @@ console.log('Backend Configuration:', backendConfig);
 const createProxy = (target, city, rewritePath) => createProxyMiddleware({
   target,
   changeOrigin: true,
-  secure: false, // Accept self-signed certificates
+  secure: true,
   logLevel: 'warn',
   pathRewrite: rewritePath || ((pathReq) => pathReq.replace(/^\/api\/(lisbon|madrid|paris|berlin)/, '/api')),
   

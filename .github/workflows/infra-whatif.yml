@@ -1,4 +1,4 @@
-name: Infrastructure What-If Analysis
+name: Infrastructure Validation and What-If
 
 on:
   pull_request:
@@ -7,106 +7,122 @@ on:
     paths:
       - 'infrastructure/**'
       - '.github/workflows/infra-whatif.yml'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to preview'
+        required: true
+        type: choice
+        options:
+          - dev
+          - test
+          - prod
+        default: dev
+      location:
+        description: 'Azure region to preview'
+        required: true
+        type: string
+        default: swedencentral
+      parametersFile:
+        description: 'Parameters file path'
+        required: true
+        type: string
+        default: infrastructure/main.parameters.example.json
 
 jobs:
-  whatif:
-    if: vars.AZURE_DEPLOYMENTS_ENABLED == 'true'
+  compile:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Compile Bicep
+        run: az bicep build --file infrastructure/main.bicep
+
+  whatif:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      vars.AZURE_INFRA_DEPLOYMENTS_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     env:
       ADMIN_PASSWORD: WhatIfOnly-${{ github.run_id }}-Aa1!
-    
+      MCP_AUTH_TOKEN: WhatIfOnly-${{ github.run_id }}-McpToken-Aa1!
+      AZURE_APP_PRINCIPAL_OBJECT_ID: ${{ vars.AZURE_APP_PRINCIPAL_OBJECT_ID }}
+      SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      INPUT_ENVIRONMENT: ${{ inputs.environment }}
+      INPUT_LOCATION: ${{ inputs.location }}
+      INPUT_PARAMETERS_FILE: ${{ inputs.parametersFile }}
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Log in to Azure
-        uses: azure/login@v1
+        uses: azure/login@v2
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          client-id: ${{ vars.AZURE_INFRA_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Extract subscription ID from credentials
-        id: extract-sub
+      - name: Validate inputs and variables
         run: |
-          SUBSCRIPTION_ID=$(echo '${{ secrets.AZURE_CREDENTIALS }}' | jq -r '.subscriptionId')
-          echo "subscription-id=$SUBSCRIPTION_ID" >> $GITHUB_OUTPUT
-          echo "Using subscription: $SUBSCRIPTION_ID"
-
-      - name: Determine parameters file
-        id: params
-        run: |
-          if [ -f "infrastructure/main.parameters.example.json" ]; then
-            PARAMS_FILE="infrastructure/main.parameters.example.json"
-          else
-            echo "Error: Default parameters file not found"
+          if [[ ! "$INPUT_LOCATION" =~ ^[a-z0-9]+$ ]]; then
+            echo "Location must be a canonical Azure region name"
             exit 1
           fi
-          echo "parameters-file=$PARAMS_FILE" >> $GITHUB_OUTPUT
-          echo "Using parameters file: $PARAMS_FILE"
+          if [[ ! "$INPUT_PARAMETERS_FILE" =~ ^infrastructure/[A-Za-z0-9._/-]+\.json$ ]] || [[ "$INPUT_PARAMETERS_FILE" == *".."* ]]; then
+            echo "Parameters file must be a JSON file under infrastructure/"
+            exit 1
+          fi
+          if [ ! -f "$INPUT_PARAMETERS_FILE" ] || ! jq empty "$INPUT_PARAMETERS_FILE" 2>/dev/null; then
+            echo "Parameters file is missing or invalid: $INPUT_PARAMETERS_FILE"
+            exit 1
+          fi
+          if [ -z "$AZURE_APP_PRINCIPAL_OBJECT_ID" ] || [ -z "$SUBSCRIPTION_ID" ]; then
+            echo "AZURE_APP_PRINCIPAL_OBJECT_ID and AZURE_SUBSCRIPTION_ID are required"
+            exit 1
+          fi
 
       - name: Run What-If analysis
         id: whatif
         run: |
           DEPLOYMENT_NAME="infra-whatif-$(date +%Y%m%d-%H%M%S)"
-          LOCATION="westeurope"
-          
-          echo "Running What-If analysis..."
-          echo "Deployment: $DEPLOYMENT_NAME"
-          echo "Location: $LOCATION"
-          echo "Parameters: ${{ steps.params.outputs.parameters-file }}"
-          echo "Template: infrastructure/main.bicep"
-          
-          # Run what-if command and capture output
+
           az deployment sub what-if \
             --name "$DEPLOYMENT_NAME" \
-            --location "$LOCATION" \
+            --location "$INPUT_LOCATION" \
             --template-file infrastructure/main.bicep \
-            --parameters "${{ steps.params.outputs.parameters-file }}" \
+            --parameters "$INPUT_PARAMETERS_FILE" \
             --parameters adminPassword="$ADMIN_PASSWORD" \
-            --subscription "${{ steps.extract-sub.outputs.subscription-id }}" \
+            --parameters mcpAuthToken="$MCP_AUTH_TOKEN" \
+            --parameters applicationPrincipalId="$AZURE_APP_PRINCIPAL_OBJECT_ID" \
+            --parameters environment="$INPUT_ENVIRONMENT" \
+            --parameters location="$INPUT_LOCATION" \
+            --subscription "$SUBSCRIPTION_ID" \
             --no-pretty-print \
-            > whatif-output.txt 2>&1 || {
-              echo "What-If analysis failed!"
-              cat whatif-output.txt
-              exit 1
-            }
-          
+            > whatif-output.txt
+
           cat whatif-output.txt
-          
-          echo "deployment-name=$DEPLOYMENT_NAME" >> $GITHUB_OUTPUT
-          echo "location=$LOCATION" >> $GITHUB_OUTPUT
+          echo "deployment-name=$DEPLOYMENT_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Generate summary
         if: always()
         run: |
-          echo "## Infrastructure What-If Analysis 🔍" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Configuration" >> $GITHUB_STEP_SUMMARY
-          echo "- **Deployment Name**: ${{ steps.whatif.outputs.deployment-name }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Location**: ${{ steps.whatif.outputs.location }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Template**: \`infrastructure/main.bicep\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Parameters**: \`${{ steps.params.outputs.parameters-file }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Subscription**: ${{ steps.extract-sub.outputs.subscription-id }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Target Scope**: Subscription" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          
+          echo "## Infrastructure What-If" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Deployment**: ${{ steps.whatif.outputs.deployment-name }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Environment**: $INPUT_ENVIRONMENT" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Location**: $INPUT_LOCATION" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Subscription**: $SUBSCRIPTION_ID" >> "$GITHUB_STEP_SUMMARY"
+
           if [ -f whatif-output.txt ]; then
-            echo "### Analysis Results" >> $GITHUB_STEP_SUMMARY
-            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-            head -n 100 whatif-output.txt >> $GITHUB_STEP_SUMMARY
-            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          fi
-          
-          if [ '${{ job.status }}' == 'success' ]; then
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "✅ **What-If analysis completed successfully**" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "Review the changes above before merging this PR." >> $GITHUB_STEP_SUMMARY
-          else
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "❌ **What-If analysis failed**" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "Please review the errors above and fix the issues." >> $GITHUB_STEP_SUMMARY
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            head -n 100 whatif-output.txt >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
           fi

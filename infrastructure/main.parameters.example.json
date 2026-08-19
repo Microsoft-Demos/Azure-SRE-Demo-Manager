@@ -21,10 +21,10 @@
       "value": true
     },
     "deployParisVm": {
-      "value": false
+      "value": true
     },
     "deployBerlinMcp": {
-      "value": false
+      "value": true
     },
     "createContainerRegistry": {
       "value": true
@@ -32,14 +32,26 @@
     "containerRegistrySku": {
       "value": "Basic"
     },
-    "githubActionsPrincipalId": {
+    "applicationPrincipalId": {
       "value": ""
     },
-    "githubOrgDatabaseId": {
-      "value": ""
+    "lisbonContainerSubnetPrefix": {
+      "value": "10.0.2.0/27"
     },
-    "runnerSubnetPrefix": {
-      "value": "10.0.4.0/24"
+    "berlinContainerSubnetPrefix": {
+      "value": "10.0.2.32/27"
+    },
+    "chaosContainerSubnetPrefix": {
+      "value": "10.0.2.64/27"
+    },
+    "berlinMcpContainerSubnetPrefix": {
+      "value": "10.0.2.96/27"
+    },
+    "appServiceSubnetPrefix": {
+      "value": "10.0.5.0/24"
+    },
+    "privateEndpointSubnetPrefix": {
+      "value": "10.0.6.0/27"
     }
   }
 }

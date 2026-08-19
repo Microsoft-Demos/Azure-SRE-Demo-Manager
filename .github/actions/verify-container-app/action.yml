@@ -1,0 +1,65 @@
+name: Verify Container App revision
+description: Wait for the newest revision to become ready and pass its health endpoint
+
+inputs:
+  resource-group:
+    description: Container App resource group
+    required: true
+  app-name:
+    description: Container App name
+    required: true
+  health-path:
+    description: Public health endpoint path
+    required: false
+    default: /health
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        RESOURCE_GROUP: ${{ inputs.resource-group }}
+        APP_NAME: ${{ inputs.app-name }}
+        HEALTH_PATH: ${{ inputs.health-path }}
+      run: |
+        EXPECTED_REVISION=$(az containerapp show \
+          --resource-group "$RESOURCE_GROUP" \
+          --name "$APP_NAME" \
+          --query properties.latestRevisionName \
+          --output tsv)
+
+        if [ -z "$EXPECTED_REVISION" ]; then
+          echo "Container App did not report a latest revision"
+          exit 1
+        fi
+
+        for attempt in $(seq 1 30); do
+          READY_REVISION=$(az containerapp show \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "$APP_NAME" \
+            --query properties.latestReadyRevisionName \
+            --output tsv)
+
+          if [ "$READY_REVISION" = "$EXPECTED_REVISION" ]; then
+            FQDN=$(az containerapp show \
+              --resource-group "$RESOURCE_GROUP" \
+              --name "$APP_NAME" \
+              --query properties.configuration.ingress.fqdn \
+              --output tsv)
+
+            if [ -n "$FQDN" ] && curl --fail --silent --show-error "https://${FQDN}${HEALTH_PATH}" > /dev/null; then
+              echo "Revision $EXPECTED_REVISION is ready and healthy"
+              exit 0
+            fi
+          fi
+
+          echo "Waiting for revision $EXPECTED_REVISION (attempt $attempt/30)"
+          sleep 10
+        done
+
+        az containerapp revision list \
+          --resource-group "$RESOURCE_GROUP" \
+          --name "$APP_NAME" \
+          --output table
+        echo "Container App revision did not become healthy"
+        exit 1

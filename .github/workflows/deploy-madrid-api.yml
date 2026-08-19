@@ -18,20 +18,26 @@ env:
   STORAGE_ACCOUNT: ${{ vars.DEPLOYMENT_STORAGE_ACCOUNT }}
   STORAGE_RG: ${{ vars.HUB_RESOURCE_GROUP }}
   CHAOS_CONTROL_URL: ${{ vars.CHAOS_CONTROL_URL }}
+  APP_SERVICE_SUBNET_PREFIX: ${{ vars.APP_SERVICE_SUBNET_PREFIX }}
 
 jobs:
   deploy:
-    if: vars.AZURE_DEPLOYMENTS_ENABLED == 'true'
-    runs-on: parking-hub-runner-windows
+    if: github.ref == 'refs/heads/main' && vars.AZURE_DEPLOYMENTS_ENABLED == 'true'
+    runs-on: windows-latest
+    permissions:
+      contents: read
+      id-token: write
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Log in to Azure
-        uses: azure/login@v1
+        uses: azure/login@v2
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          client-id: ${{ vars.AZURE_APP_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - name: Debug - Show current principal
         shell: pwsh
@@ -39,8 +45,7 @@ jobs:
           $account = az account show -o json | ConvertFrom-Json
           $principal = $account.user.name
           Write-Host "Service Principal: $($principal.Substring(0, [Math]::Min(8, $principal.Length)))..."
-          Write-Host "Full details - user.name will be the service principal ID"
-          Write-Host "To see the actual ID: check GitHub secret AZURE_CREDENTIALS and look at clientId field"
+          Write-Host "OIDC client ID is configured in the AZURE_APP_CLIENT_ID repository variable"
 
       - name: Create deployment package
         shell: pwsh
@@ -54,10 +59,10 @@ jobs:
           Compress-Archive -Path "$tempDir\*" -DestinationPath "madrid-api-${{ github.run_id }}.zip" -Force
           Remove-Item $tempDir -Recurse -Force
 
-      - name: Upload to storage via private endpoint
+      - name: Upload to deployment storage
         shell: pwsh
         run: |
-          Write-Host "Uploading to deployment storage via private endpoint..."
+          Write-Host "Uploading to deployment storage..."
           az storage blob upload `
             --account-name $env:STORAGE_ACCOUNT `
             --container-name "deployments" `
@@ -87,6 +92,12 @@ jobs:
           $appDir = "${{ env.APP_DIR }}"
           $blobUrl = "${{ env.BLOB_URL }}"
           $chaosControlUrl = "${{ env.CHAOS_CONTROL_URL }}"
+          $appServiceSubnetPrefix = "${{ env.APP_SERVICE_SUBNET_PREFIX }}"
+
+          if ([string]::IsNullOrWhiteSpace($appServiceSubnetPrefix)) {
+            Write-Host "ERROR: APP_SERVICE_SUBNET_PREFIX is required."
+            exit 1
+          }
           
           Write-Host "Stopping service if exists..."
           $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
@@ -313,8 +324,19 @@ jobs:
           }
           
           # Set environment variables (newline-separated; each nssm set call replaces, not appends)
-          $envVars = "NODE_ENV=production`nPORT=3002`nPARKING_NAME=Madrid Centro Parking`nPARKING_CITY=Madrid`nPARKING_LOCATION=Plaza Mayor, Madrid`nEVENT_LOG_SOURCE=MadridParkingAPI`nEVENT_LOG_NAME=Application`nEVENT_LOG_BACKEND=eventcreate`nCERT_PATH=$appDir\madrid.crt`nKEY_PATH=$appDir\madrid.key"
+          $envVars = "NODE_ENV=production`nPORT=3002`nPARKING_NAME=Madrid Centro Parking`nPARKING_CITY=Madrid`nPARKING_LOCATION=Plaza Mayor, Madrid`nEVENT_LOG_SOURCE=MadridParkingAPI`nEVENT_LOG_NAME=Application`nEVENT_LOG_BACKEND=eventcreate`nCHAOS_CONTROL_URL=$chaosControlUrl"
           nssm set $serviceName AppEnvironmentExtra $envVars
+
+          Write-Host "Configuring Windows Firewall for App Service traffic..."
+          Remove-NetFirewallRule -Name "MadridParkingAPI-3002" -ErrorAction SilentlyContinue
+          New-NetFirewallRule `
+            -Name "MadridParkingAPI-3002" `
+            -DisplayName "Madrid Parking API from App Service" `
+            -Direction Inbound `
+            -Action Allow `
+            -Protocol TCP `
+            -LocalPort 3002 `
+            -RemoteAddress $appServiceSubnetPrefix | Out-Null
           
           # Configure logging
           $logDir = Join-Path $appDir "logs"
@@ -356,6 +378,7 @@ jobs:
           $service = Get-Service -Name $serviceName
           if ($service.Status -eq 'Running') {
             Write-Host "✅ Service is running"
+            Write-Host "DEPLOYMENT_SUCCESS"
             exit 0
           } else {
             Write-Host "❌ Service failed to start"
@@ -388,7 +411,7 @@ jobs:
           }
           
           # Fail if deployment script failed
-          if ($stdout.message -match '❌' -or $stdout.message -match 'ERROR:') {
+          if ($stdout.message -notmatch 'DEPLOYMENT_SUCCESS' -or $stdout.message -match '❌' -or $stdout.message -match 'ERROR:') {
             Write-Host "Deployment failed!"
             exit 1
           }

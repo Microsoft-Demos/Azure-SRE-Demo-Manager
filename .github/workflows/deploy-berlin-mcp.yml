@@ -1,7 +1,7 @@
 name: Deploy Berlin MCP Server
 
 # Required GitHub Secrets:
-# - AZURE_CREDENTIALS: Azure service principal credentials for deployment
+# - Azure authentication uses repository OIDC variables
 # - MCP_AUTH_TOKEN: Bearer token for MCP server authentication (optional but recommended)
 #
 # Required GitHub Variables:
@@ -13,40 +13,35 @@ on:
     paths:
       - 'backend/berlin-mcp-server/**'
       - 'infrastructure/modules/berlin-mcp-server.bicep'
+      - '.github/actions/verify-container-app/**'
       - '.github/workflows/deploy-berlin-mcp.yml'
   workflow_dispatch:
-    inputs:
-      environment:
-        description: 'Environment to deploy'
-        required: true
-        default: 'dev'
-        type: choice
-        options:
-          - dev
-          - prod
 
 env:
-  AZURE_REGION: swedencentral
-  RESOURCE_GROUP: rg-parking-berlin-mcp-dev
+  RESOURCE_GROUP: ${{ vars.BERLIN_MCP_RESOURCE_GROUP }}
+  BERLIN_RESOURCE_GROUP: ${{ vars.BERLIN_RESOURCE_GROUP }}
   CONTAINER_APP_NAME: ca-berlin-mcp
   AZURE_CONTAINER_REGISTRY: ${{ vars.AZURE_CONTAINER_REGISTRY }}
   IMAGE_NAME: berlin-mcp-server
 
 jobs:
   build-and-deploy:
-    if: vars.AZURE_DEPLOYMENTS_ENABLED == 'true'
+    if: github.ref == 'refs/heads/main' && vars.AZURE_DEPLOYMENTS_ENABLED == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      id-token: write
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Log in to Azure
-        uses: azure/login@v1
+        uses: azure/login@v2
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          client-id: ${{ vars.AZURE_APP_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - name: Log in to Azure Container Registry
         run: |
@@ -86,7 +81,7 @@ jobs:
           # Get the Berlin API URL from the Berlin resource group
           BERLIN_API_URL=$(az containerapp show \
             --name ca-parking-berlin \
-            --resource-group rg-parking-berlin-dev \
+            --resource-group ${{ env.BERLIN_RESOURCE_GROUP }} \
             --query properties.configuration.ingress.fqdn \
             --output tsv)
           
@@ -120,11 +115,14 @@ jobs:
           
           # Check if MCP_AUTH_TOKEN is provided
           if [ -z "$MCP_AUTH_TOKEN" ]; then
-            echo "⚠️  WARNING: MCP_AUTH_TOKEN secret not set. Authentication will be disabled."
-            echo "To enable authentication, add MCP_AUTH_TOKEN to GitHub Secrets."
-          else
-            echo "✅ MCP_AUTH_TOKEN found - authentication will be enabled"
+            echo "MCP_AUTH_TOKEN secret is required"
+            exit 1
           fi
+
+          az containerapp secret set \
+            --name ${{ env.CONTAINER_APP_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --secrets "mcp-auth-token=$MCP_AUTH_TOKEN"
           
           # Update container app with new image and environment variables
           # Note: MCP_ALLOWED_HOSTS is no longer set (DNS rebinding protection disabled)
@@ -135,9 +133,16 @@ jobs:
             --set-env-vars \
               "BERLIN_API_URL=$BERLIN_API_URL" \
               "APPLICATIONINSIGHTS_CONNECTION_STRING=$APPINSIGHTS_CONNECTION" \
-              "MCP_AUTH_TOKEN=$MCP_AUTH_TOKEN"
+              "MCP_AUTH_TOKEN=secretref:mcp-auth-token"
           
           echo "✅ Container App updated successfully"
+
+      - name: Verify Container App revision
+        if: steps.check_rg.outputs.exists == 'true'
+        uses: ./.github/actions/verify-container-app
+        with:
+          resource-group: ${{ env.RESOURCE_GROUP }}
+          app-name: ${{ env.CONTAINER_APP_NAME }}
 
       - name: Get MCP Server URL
         if: steps.check_rg.outputs.exists == 'true'

@@ -4,8 +4,8 @@
   "metadata": {
     "_generator": {
       "name": "bicep",
-      "version": "0.40.2.10011",
-      "templateHash": "6025811491089791001"
+      "version": "0.39.26.7824",
+      "templateHash": "13911608108792457346"
     }
   },
   "parameters": {
@@ -33,6 +33,13 @@
       "defaultValue": "",
       "metadata": {
         "description": "Container registry server (leave empty for public registries)"
+      }
+    },
+    "chaosControlUrl": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Chaos Control service URL for fault configuration"
       }
     },
     "tags": {
@@ -111,6 +118,10 @@
                 {
                   "name": "NODE_ENV",
                   "value": "production"
+                },
+                {
+                  "name": "CHAOS_CONTROL_URL",
+                  "value": "[parameters('chaosControlUrl')]"
                 }
               ],
               "probes": [

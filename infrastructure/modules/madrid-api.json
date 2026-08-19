@@ -4,8 +4,8 @@
   "metadata": {
     "_generator": {
       "name": "bicep",
-      "version": "0.40.2.10011",
-      "templateHash": "1876282321700861213"
+      "version": "0.39.26.7824",
+      "templateHash": "16145315425391491566"
     }
   },
   "parameters": {
@@ -57,7 +57,7 @@
   },
   "resources": [
     {
-      "condition": "[parameters('createPublicIp')]",
+      "condition": "[and(parameters('deployVM'), parameters('createPublicIp'))]",
       "type": "Microsoft.Network/publicIPAddresses",
       "apiVersion": "2023-05-01",
       "name": "pip-madrid-vm",
@@ -74,6 +74,7 @@
       }
     },
     {
+      "condition": "[parameters('deployVM')]",
       "type": "Microsoft.Network/networkInterfaces",
       "apiVersion": "2023-05-01",
       "name": "nic-madrid-vm",
@@ -209,7 +210,7 @@
     },
     "privateIpAddress": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Network/networkInterfaces', 'nic-madrid-vm'), '2023-05-01').ipConfigurations[0].properties.privateIPAddress]"
+      "value": "[if(parameters('deployVM'), reference(resourceId('Microsoft.Network/networkInterfaces', 'nic-madrid-vm'), '2023-05-01').ipConfigurations[0].properties.privateIPAddress, '')]"
     },
     "publicIpAddress": {
       "type": "string",
@@ -221,7 +222,7 @@
     },
     "apiUrl": {
       "type": "string",
-      "value": "[if(and(parameters('deployVM'), parameters('createPublicIp')), format('http://{0}:3002', reference(resourceId('Microsoft.Network/publicIPAddresses', 'pip-madrid-vm'), '2023-05-01').dnsSettings.fqdn), format('http://{0}:3002', reference(resourceId('Microsoft.Network/networkInterfaces', 'nic-madrid-vm'), '2023-05-01').ipConfigurations[0].properties.privateIPAddress))]"
+      "value": "[if(not(parameters('deployVM')), '', if(parameters('createPublicIp'), format('http://{0}:3002', reference(resourceId('Microsoft.Network/publicIPAddresses', 'pip-madrid-vm'), '2023-05-01').dnsSettings.fqdn), format('http://{0}:3002', reference(resourceId('Microsoft.Network/networkInterfaces', 'nic-madrid-vm'), '2023-05-01').ipConfigurations[0].properties.privateIPAddress)))]"
     }
   }
 }

@@ -46,3 +46,4 @@ curl --insecure https://localhost:3003/api/parking
 sudo journalctl -u paris-parking-api -f
 sudo tail -f /var/log/syslog | grep ParisParkingAPI
 ```
+> **Historical note:** The portable deployment now runs the private Paris endpoint over HTTP inside the VNet by default.

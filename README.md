@@ -186,6 +186,8 @@ Bicep templates in `infrastructure/` deploy the full Azure environment.
 ```bash
 cd infrastructure
 cp main.parameters.example.json main.parameters.json
+# Optional for later GitHub Actions application deployments:
+export APPLICATION_PRINCIPAL_ID='<application-service-principal-object-id>'
 ./deploy.sh
 ```
 
@@ -238,6 +240,8 @@ REACT_APP_VM_HEALTH_CONTROL_URL=https://<vm-health-control-fqdn>
 ```
 
 CI/CD via GitHub Actions is documented in [.github/workflows/README.md](.github/workflows/README.md).
+
+For a clean subscription, start with [Deployment Bootstrap](docs/DEPLOYMENT_BOOTSTRAP.md). It covers OIDC, roles, providers, quota checks, output mapping, and workflow order.
 
 To decommission an existing environment, follow [Azure Subscription Retirement](docs/SUBSCRIPTION_RETIREMENT.md). The retirement workflow does not run deployments, ARM what-if, or application tests.
 
